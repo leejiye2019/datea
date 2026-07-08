@@ -87,6 +87,7 @@ textarea{resize:vertical;min-height:120px;}
 .dots{display:flex;gap:3px;justify-content:center;margin-top:3px;height:6px;}
 .dots i{width:10px;height:5px;border-radius:3px;display:block;}
 .d0{background:var(--pink);} .d1{background:var(--mint);} .d2{background:var(--butter);} .d3{background:var(--lav);}
+.d-ev{background:var(--blue);width:5px !important;height:5px !important;border-radius:999px !important;}
 
 /* photo grids */
 .pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
@@ -223,6 +224,33 @@ async function fetchMeta(url){
     }
   }catch(e){}
   return base;
+}
+
+/* ---------- themes & lightbox ---------- */
+const THEMES = {
+  pink:  {name:"블러시 핑크", pink:"#F8C8DC", soft:"#FDEBF1", deep:"#E1889E", rose:"#C96B85"},
+  peach: {name:"피치 크림",   pink:"#FFE1CC", soft:"#FFF1E6", deep:"#EFA868", rose:"#C07A3B"},
+  butter:{name:"버터 옐로우", pink:"#FDE7B2", soft:"#FFF6DD", deep:"#E0B44A", rose:"#A0801F"},
+  mint:  {name:"민트 그린",   pink:"#C7EDE6", soft:"#EAF7F4", deep:"#5FBFAE", rose:"#38907F"},
+  blue:  {name:"베이비 블루", pink:"#CDE7F0", soft:"#EAF5F9", deep:"#7FB5D6", rose:"#49809E"},
+  lav:   {name:"라벤더",      pink:"#E6D6F2", soft:"#F5EEFA", deep:"#A585C9", rose:"#7B58A6"}
+};
+function applyTheme(t){
+  const r = document.documentElement.style;
+  r.setProperty("--pink", t.pink); r.setProperty("--pink-soft", t.soft);
+  r.setProperty("--pink-deep", t.deep); r.setProperty("--rose", t.rose);
+}
+function Lightbox({src, onClose, actions}){
+  return <div className="overlay" style={{alignItems:"center",background:"rgba(32,26,22,.85)",zIndex:80}}
+    onClick={e=>e.target===e.currentTarget&&onClose()}>
+    <div style={{textAlign:"center",maxWidth:"94vw"}}>
+      <img src={src} style={{maxWidth:"94vw",maxHeight:"76vh",borderRadius:16,display:"block",margin:"0 auto",boxShadow:"0 20px 60px rgba(0,0,0,.4)"}}/>
+      <div className="row" style={{justifyContent:"center",marginTop:14,gap:8}}>
+        {actions}
+        <button className="btn" style={{background:"#fff",color:"var(--ink)"}} onClick={onClose}>닫기</button>
+      </div>
+    </div>
+  </div>;
 }
 
 /* ---------- icons ---------- */
@@ -395,6 +423,7 @@ function Profiles({cid, me, users}){
   const [profiles,setProfiles] = useState({});
   const [editing,setEditing] = useState(false);
   const [form,setForm] = useState({});
+  const [zoom,setZoom] = useState(null);
   useEffect(()=>db.collection("couples").doc(cid).collection("profiles")
     .onSnapshot(s=>{ const o={}; s.forEach(d=>o[d.id]=d.data()); setProfiles(o); }),[cid]);
   const members = users; // [{uid,name,photo}...] me first
@@ -410,7 +439,7 @@ function Profiles({cid, me, users}){
       return <div key={u.uid} className={"folder "+folderCls(i)} >
         <span className="tab"></span>
         <div className="row">
-          {u.photo ? <img className="avatar" src={u.photo}/> : <div className="avatar">{mine?"🐹":"🐻"}</div>}
+          {u.photo ? <img className="avatar" src={u.photo} style={{cursor:"zoom-in"}} onClick={()=>setZoom(u.photo)}/> : <div className="avatar">{mine?"🐹":"🐻"}</div>}
           <div className="grow">
             <b style={{fontSize:16}}>{p.name || u.name || (mine?"나":"상대방")}</b>
             <div className="sub">{p.bio || "한 줄 소개가 아직 없어요"}</div>
@@ -426,6 +455,7 @@ function Profiles({cid, me, users}){
       </div>;
     })}
     {members.length<2 && <p className="sub" style={{marginTop:10}}>커플 연결이 완료되면 상대방 프로필도 여기에 함께 보여요.</p>}
+    {zoom && <Lightbox src={zoom} onClose={()=>setZoom(null)}/>}
     {editing && <div className="overlay" onClick={e=>e.target===e.currentTarget&&setEditing(false)}>
       <div className="sheet">
         <div className="row" style={{justifyContent:"space-between"}}><b style={{fontSize:18}}>내 프로필</b>
@@ -535,12 +565,18 @@ function Links({cid, me, cat, users}){
 }
 
 /* ---------- Calendar ---------- */
-function CalendarView({diaries, onWrite, onOpen}){
+function CalendarView({cid, me, diaries, onWrite, onOpen}){
   const now = new Date();
   const [ym,setYm] = useState([now.getFullYear(), now.getMonth()]);
   const [sel,setSel] = useState(todayStr());
+  const [events,setEvents] = useState([]);
+  const [evForm,setEvForm] = useState(null); // {date,title,memo}
   const [y,m] = ym;
+  useEffect(()=>db.collection("couples").doc(cid).collection("events")
+    .onSnapshot(s=>{ const a=[]; s.forEach(d=>a.push({id:d.id,...d.data()}));
+      a.sort((x,y)=>x.date<y.date?-1:1); setEvents(a); }),[cid]);
   const byDate = useMemo(()=>{ const o={}; diaries.forEach(d=>{ (o[d.date]=o[d.date]||[]).push(d); }); return o; },[diaries]);
+  const evByDate = useMemo(()=>{ const o={}; events.forEach(e=>{ (o[e.date]=o[e.date]||[]).push(e); }); return o; },[events]);
   const first = new Date(y,m,1); const startDow = first.getDay();
   const dim = new Date(y,m+1,0).getDate();
   const cells = [];
@@ -548,6 +584,17 @@ function CalendarView({diaries, onWrite, onOpen}){
   for(let d=1;d<=dim;d++) cells.push(d);
   const key = (d)=> y+"-"+String(m+1).padStart(2,"0")+"-"+String(d).padStart(2,"0");
   const selList = byDate[sel]||[];
+  const selEv = evByDate[sel]||[];
+  const upcoming = events.filter(e=>e.date>=todayStr());
+  const dday = (s)=>{ const n=Math.round((new Date(s+"T00:00:00")-new Date(todayStr()+"T00:00:00"))/86400000);
+    return n===0? "D-Day" : "D-"+n; };
+  const saveEv = async ()=>{
+    if(!evForm.title.trim()){ alert("일정 제목을 적어주세요!"); return; }
+    await db.collection("couples").doc(cid).collection("events").add({
+      date:evForm.date, title:evForm.title.trim(), memo:(evForm.memo||"").trim(), by:me.uid, ts:Date.now()});
+    setEvForm(null);
+  };
+  const delEv = (id)=>{ if(confirm("이 일정을 삭제할까요?")) db.collection("couples").doc(cid).collection("events").doc(id).delete(); };
   return <div className="fade-in">
     <div className="title-xl serif">Calendar</div>
     <div className="card" style={{marginTop:12}}>
@@ -560,26 +607,64 @@ function CalendarView({diaries, onWrite, onOpen}){
         {["일","월","화","수","목","금","토"].map(w=><div key={w} className="cal-head">{w}</div>)}
         {cells.map((d,i)=>{
           if(d===null) return <div key={"e"+i}/>;
-          const k = key(d); const list = byDate[k]||[];
+          const k = key(d); const list = byDate[k]||[]; const evs = evByDate[k]||[];
           return <div key={k} className={"cal-cell"+(k===sel?" sel":"")+(k===todayStr()?" today":"")} onClick={()=>setSel(k)}>
             <span className="num">{d}</span>
-            <div className="dots">{list.slice(0,3).map((_,j)=><i key={j} className={dotCls(j)}/>)}</div>
+            <div className="dots">{list.slice(0,3).map((_,j)=><i key={j} className={dotCls(j)}/>)}
+              {evs.length>0 && <i className="d-ev"/>}</div>
           </div>;
         })}
+      </div>
+      <div className="row" style={{gap:10,marginTop:6,justifyContent:"center"}}>
+        <span className="sub" style={{fontSize:11}}>● 일기</span>
+        <span className="sub" style={{fontSize:11,color:"#7FA8C4"}}>● 일정</span>
       </div>
     </div>
     <div className="card" style={{marginTop:12}}>
       <div className="row" style={{justifyContent:"space-between"}}>
         <b>{fmtK(sel)} ({dayK(sel)})</b>
-        <button className="btn btn-ghost" style={{padding:"7px 12px",fontSize:13}} onClick={()=>onWrite(sel)}>+ 이 날 일기 쓰기</button>
+        <div className="row" style={{gap:6}}>
+          <button className="btn btn-line" style={{padding:"7px 11px",fontSize:13,color:"#49809E"}}
+            onClick={()=>setEvForm({date:sel,title:"",memo:""})}>+ 일정</button>
+          <button className="btn btn-ghost" style={{padding:"7px 11px",fontSize:13}} onClick={()=>onWrite(sel)}>+ 일기</button>
+        </div>
       </div>
-      {selList.length===0 ? <p className="sub" style={{margin:"12px 0 4px"}}>이 날의 기록이 아직 없어요.</p>
-        : selList.map((d,i)=><div key={d.id} className={"folder "+folderCls(i)} style={{cursor:"pointer"}} onClick={()=>onOpen(d)}>
-            <span className="tab"></span>
-            <b>{d.title||"제목 없음"}</b>
-            {d.place && <div className="sub row" style={{gap:4}}>{I.pin}{d.place}</div>}
-          </div>)}
+      {selEv.map(e=><div key={e.id} className="row" style={{marginTop:10,background:"#EAF5F9",borderRadius:14,padding:"10px 12px"}}>
+        <span>📌</span>
+        <div className="grow"><b style={{fontSize:14}}>{e.title}</b>
+          {e.memo && <div className="sub">{e.memo}</div>}</div>
+        <button className="sub" style={{fontSize:11}} onClick={()=>delEv(e.id)}>삭제</button>
+      </div>)}
+      {selList.length===0 && selEv.length===0 && <p className="sub" style={{margin:"12px 0 4px"}}>이 날의 기록이 아직 없어요.</p>}
+      {selList.map((d,i)=><div key={d.id} className={"folder "+folderCls(i)} style={{cursor:"pointer"}} onClick={()=>onOpen(d)}>
+        <span className="tab"></span>
+        <b>{d.title||"제목 없음"}</b>
+        {d.place && <div className="sub row" style={{gap:4}}>{I.pin}{d.place}</div>}
+      </div>)}
     </div>
+    <div className="card" style={{marginTop:12}}>
+      <b>다가오는 일정 💗</b>
+      {upcoming.length===0 && <p className="sub" style={{margin:"10px 0 4px"}}>예정된 데이트가 없어요. 캘린더에서 날짜를 고르고 + 일정을 눌러보세요!</p>}
+      {upcoming.map(e=><div key={e.id} className="row" style={{marginTop:10}}>
+        <span className="chip" style={{background:"#EAF5F9",color:"#49809E",fontWeight:700,minWidth:52,textAlign:"center"}}>{dday(e.date)}</span>
+        <div className="grow"><b style={{fontSize:14}}>{e.title}</b>
+          <div className="sub">{fmtK(e.date)} ({dayK(e.date)}){e.memo? " · "+e.memo : ""}</div></div>
+        <button className="sub" style={{fontSize:11}} onClick={()=>delEv(e.id)}>삭제</button>
+      </div>)}
+    </div>
+    {evForm && <div className="overlay" onClick={e=>e.target===e.currentTarget&&setEvForm(null)}>
+      <div className="sheet">
+        <div className="row" style={{justifyContent:"space-between"}}><b style={{fontSize:18}} className="serif">일정 추가</b>
+          <button className="icon-btn" onClick={()=>setEvForm(null)}>{I.x}</button></div>
+        <div style={{marginTop:12}}><div className="sub" style={{marginBottom:4}}>날짜</div>
+          <input type="date" value={evForm.date} onChange={e=>setEvForm({...evForm,date:e.target.value})}/></div>
+        <div style={{marginTop:10}}><div className="sub" style={{marginBottom:4}}>일정 제목</div>
+          <input placeholder="예: 벚꽃 데이트 🌸" value={evForm.title} onChange={e=>setEvForm({...evForm,title:e.target.value})}/></div>
+        <div style={{marginTop:10}}><div className="sub" style={{marginBottom:4}}>메모 (선택)</div>
+          <input placeholder="예: 2시 야탑역에서 만나기" value={evForm.memo} onChange={e=>setEvForm({...evForm,memo:e.target.value})}/></div>
+        <button className="btn btn-primary" style={{marginTop:16}} onClick={saveEv}>저장하기</button>
+      </div>
+    </div>}
   </div>;
 }
 
@@ -587,6 +672,7 @@ function CalendarView({diaries, onWrite, onOpen}){
 function DiaryView({cid, me, users, diaries, editorDate, clearEditorDate, openId, clearOpenId}){
   const [view,setView] = useState("list");
   const [q,setQ] = useState("");
+  const [zoom,setZoom] = useState(null);   // {p, d}
   const [editor,setEditor] = useState(null);   // null | {entry?, date?}
   const [detail,setDetail] = useState(null);   // diary object
   useEffect(()=>{ if(editorDate){ setEditor({date:editorDate}); clearEditorDate(); } },[editorDate]);
@@ -634,10 +720,13 @@ function DiaryView({cid, me, users, diaries, editorDate, clearEditorDate, openId
     </> : <>
       {photos.length===0 && <p className="sub" style={{textAlign:"center",marginTop:36}}>아직 사진이 없어요. 일기에 사진을 첨부하면 여기에 모여요 📷</p>}
       <div className="album" style={{marginTop:12}}>
-        {photos.map((x,i)=><img key={i} src={x.p} onClick={()=>setDetail(x.d)}/>)}
+        {photos.map((x,i)=><img key={i} src={x.p} style={{cursor:"zoom-in"}} onClick={()=>setZoom(x)}/>)}
       </div>
     </>}
 
+    {zoom && <Lightbox src={zoom.p} onClose={()=>setZoom(null)}
+      actions={<button className="btn btn-primary" style={{width:"auto"}}
+        onClick={()=>{setDetail(zoom.d); setZoom(null);}}>일기 보기</button>}/>}
     {editor && <DiaryEditor cid={cid} me={me} init={editor} close={()=>setEditor(null)}/>}
     {detail && <DiaryDetail cid={cid} me={me} users={users} entry={detail}
       close={()=>setDetail(null)} edit={()=>{setEditor({entry:detail}); setDetail(null);}}/>}
@@ -710,6 +799,7 @@ function DiaryEditor({cid, me, init, close}){
 function DiaryDetail({cid, me, users, entry, close, edit}){
   const [comments,setComments] = useState([]);
   const [text,setText] = useState("");
+  const [zoom,setZoom] = useState(null);
   const nameOf = (uid)=>{ const u=users.find(x=>x.uid===uid); return u? (u.name||"?") : "?"; };
   const photoOf = (uid)=>{ const u=users.find(x=>x.uid===uid); return u&&u.photo; };
   useEffect(()=>db.collection("couples").doc(cid).collection("diaries").doc(entry.id)
@@ -740,7 +830,7 @@ function DiaryDetail({cid, me, users, entry, close, edit}){
       <h2 className="serif" style={{margin:"8px 0 2px",fontSize:22}}>{entry.title||"제목 없음"}</h2>
       {entry.place && <div className="sub row" style={{gap:4}}>{I.pin}{entry.place}</div>}
       {(entry.photos&&entry.photos.length>0) && <div className="pgrid" style={{marginTop:12}}>
-        {entry.photos.map((p,i)=><img key={i} src={p}/>)}
+        {entry.photos.map((p,i)=><img key={i} src={p} style={{cursor:"zoom-in"}} onClick={()=>setZoom(p)}/>)}
       </div>}
       {entry.content && <p style={{whiteSpace:"pre-wrap",marginTop:14}}>{entry.content}</p>}
       <div className="hr"/>
@@ -760,6 +850,7 @@ function DiaryDetail({cid, me, users, entry, close, edit}){
         <input placeholder="댓글을 남겨보세요" value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()}/>
         <button className="btn btn-primary" style={{width:"auto",whiteSpace:"nowrap"}} onClick={send}>남기기</button>
       </div>
+      {zoom && <Lightbox src={zoom} onClose={()=>setZoom(null)}/>}
     </div>
   </div>;
 }
@@ -902,6 +993,22 @@ function AccountView({me, userDoc, couple, users, refresh}){
         : <CoupleCard couple={couple} me={me} onJoined={refresh}/>}
     </div>
 
+    <div className="card" style={{marginTop:12}}>
+      <b>테마 컬러 🎨</b>
+      <div className="sub" style={{marginTop:2}}>앱 전체 색감을 골라보세요 (나에게만 적용돼요)</div>
+      <div className="row" style={{gap:10,marginTop:12,flexWrap:"wrap"}}>
+        {Object.entries(THEMES).map(([k,t])=>{
+          const on = (userDoc.theme||"pink")===k;
+          return <button key={k} title={t.name} aria-label={t.name}
+            onClick={async ()=>{ applyTheme(t); await db.collection("users").doc(me.uid).update({theme:k}); refresh(); }}
+            style={{width:36,height:36,borderRadius:999,background:t.pink,flexShrink:0,
+              border: on? "3px solid "+t.deep : "2px solid #fff",
+              boxShadow:"0 2px 8px rgba(120,90,80,.18)"}}/>;
+        })}
+      </div>
+      <div className="sub" style={{marginTop:8}}>현재: {THEMES[userDoc.theme||"pink"].name}</div>
+    </div>
+
     {isPwUser && <div className="card" style={{marginTop:12}}>
       <b>비밀번호 변경</b>
       <input type="password" placeholder="현재 비밀번호" value={curPw} onChange={e=>setCurPw(e.target.value)} style={{marginTop:10}}/>
@@ -970,6 +1077,9 @@ function Shell({me}){
     return un;
   },[userDoc&&userDoc.coupleId, tick]);
 
+  // apply saved color theme
+  useEffect(()=>{ const t = userDoc && THEMES[userDoc.theme]; if(t) applyTheme(t); },[userDoc && userDoc.theme]);
+
   // subscribe profiles (Interests의 프로필 이름을 닉네임 대신 쓸 수 있게)
   const [profMap,setProfMap] = useState({});
   useEffect(()=>{
@@ -1008,7 +1118,7 @@ function Shell({me}){
         <CoupleCard couple={couple} me={me} onJoined={refresh}/>
       </div>}
       {tab==="interests" && <Interests cid={cid} me={me} users={usersM}/>}
-      {tab==="calendar" && <CalendarView diaries={diaries}
+      {tab==="calendar" && <CalendarView cid={cid} me={me} diaries={diaries}
         onWrite={d=>{setEditorDate(d); setTab("diary");}}
         onOpen={d=>{setOpenId(d.id); setTab("diary");}}/>}
       {tab==="diary" && <DiaryView cid={cid} me={me} users={usersM} diaries={diaries}
