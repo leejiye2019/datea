@@ -1,4 +1,4 @@
-const CACHE = "datea-v1";
+const CACHE = "datea-v2";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (e) => {
@@ -16,7 +16,20 @@ self.addEventListener("fetch", (e) => {
   const url = e.request.url;
   // 실시간 데이터/외부 API는 캐시하지 않음
   if (url.includes("firestore") || url.includes("firebase") || url.includes("googleapis") ||
-      url.includes("microlink") || url.includes("gstatic")) return;
+      url.includes("microlink") || url.includes("gstatic") || url.includes("oembed")) return;
+
+  // HTML(페이지 자체)은 항상 네트워크 우선 → 새 버전이 바로 반영됨. 오프라인일 때만 캐시 사용
+  if (e.request.mode === "navigate" || url.endsWith("/index.html")) {
+    e.respondWith(
+      fetch(e.request).then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(e.request, copy));
+        return res;
+      }).catch(() => caches.match(e.request))
+    );
+    return;
+  }
+  // 나머지(아이콘, 폰트 등)는 캐시 우선
   e.respondWith(
     caches.match(e.request).then((cached) => cached || fetch(e.request).catch(() => cached))
   );
