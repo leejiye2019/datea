@@ -514,8 +514,19 @@ function Links({cid, me, cat, users}){
           <input value={edit.title||""} onChange={e=>setEdit({...edit,title:e.target.value})} placeholder="예: toxic till the end"/></div>
         <div style={{marginTop:10}}><div className="sub" style={{marginBottom:4}}>부제 (가수·감독·작가 등)</div>
           <input value={edit.desc||""} onChange={e=>setEdit({...edit,desc:e.target.value})} placeholder="예: 로제 (ROSÉ)"/></div>
-        <div style={{marginTop:10}}><div className="sub" style={{marginBottom:4}}>이미지 주소 (선택)</div>
-          <input value={edit.image||""} onChange={e=>setEdit({...edit,image:e.target.value})} placeholder="비워두면 사이트 아이콘이 나와요"/></div>
+        <div style={{marginTop:10}}><div className="sub" style={{marginBottom:4}}>이미지</div>
+          <div className="row">
+            <button className="btn btn-ghost" style={{whiteSpace:"nowrap"}}
+              onClick={()=>document.getElementById("link-img-file").click()}>📷 사진 올리기</button>
+            <input id="link-img-file" type="file" accept="image/*" style={{display:"none"}}
+              onChange={async e=>{ const f=e.target.files[0]; if(f){ const b64=await compressImage(f,400,0.7); setEdit({...edit,image:b64}); } e.target.value=""; }}/>
+            {edit.image && <button className="btn btn-line" style={{whiteSpace:"nowrap",color:"var(--sub)"}}
+              onClick={()=>setEdit({...edit,image:""})}>이미지 지우기</button>}
+          </div>
+          <input value={(edit.image||"").startsWith("data:")? "(올린 사진 사용 중)" : (edit.image||"")}
+            readOnly={(edit.image||"").startsWith("data:")}
+            onChange={e=>setEdit({...edit,image:e.target.value})}
+            placeholder="또는 이미지 주소(URL)를 붙여넣어도 돼요" style={{marginTop:8}}/></div>
         {edit.image && <img src={edit.image} style={{width:80,height:80,objectFit:"cover",borderRadius:12,marginTop:10}} onError={e=>e.target.style.display="none"}/>}
         <button className="btn btn-primary" style={{marginTop:16}} onClick={saveEdit}>저장하기</button>
       </div>
