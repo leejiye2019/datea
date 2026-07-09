@@ -67,7 +67,11 @@ input[type="date"]{-webkit-appearance:none;appearance:none;max-width:100%;}
   display:flex;justify-content:space-around;padding:8px 6px calc(8px + env(safe-area-inset-bottom));z-index:40;}
 .nav button{display:flex;flex-direction:column;align-items:center;gap:2px;color:#BDB3AA;
   font-size:10.5px;padding:6px 10px;border-radius:14px;position:relative;}
-.nav .ndot{position:absolute;top:3px;right:10px;width:8px;height:8px;border-radius:999px;background:#F26D6D;}
+.ndot{position:absolute;width:8px;height:8px;border-radius:999px;background:#F26D6D;}
+.nav .ndot{top:3px;right:10px;}
+.handle{color:#D8CFC7;font-size:18px;cursor:grab;padding:4px 2px;touch-action:none;user-select:none;}
+.lk-item{transition:none;}
+.lk-item.dragging{opacity:.93;position:relative;z-index:5;box-shadow:0 12px 30px rgba(120,90,80,.25);border-radius:16px;}
 .nav button.on{color:var(--rose);background:var(--pink-soft);}
 .nav svg{width:22px;height:22px;}
 
@@ -267,6 +271,10 @@ function BackTrap({onClose}){
 }
 const EMOJIS = ["💗","💕","💖","💘","🥰","😍","😘","🫶","🐹","🐻","🐶","🐱","🌸","🌷","🌼","🍀","✨","⭐","🌙","🎀","🦋","🧸","💌","🍑"];
 const annivDays = (s)=> Math.floor((new Date(todayStr()+"T00:00:00") - new Date(s+"T00:00:00"))/86400000) + 1;
+const relTime = (t)=>{ const s=Math.floor((Date.now()-t)/1000);
+  if(s<60) return "방금 전"; const m=Math.floor(s/60); if(m<60) return m+"분 전";
+  const h=Math.floor(m/60); if(h<24) return h+"시간 전"; const d=Math.floor(h/24); if(d<7) return d+"일 전";
+  return new Date(t).toLocaleDateString("ko-KR",{month:"numeric",day:"numeric"}); };
 
 /* ---------- themes & lightbox ---------- */
 const THEMES = {
@@ -311,6 +319,7 @@ const I = {
   camera:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg>,
   pin:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="14" height="14"><path d="M12 21s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>,
   pencil:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19l-4 1z"/><path d="M14.5 6.5l3 3"/></svg>,
+  bell:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M18 9a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6"/><path d="M10.3 19a2 2 0 0 0 3.4 0"/></svg>,
   google:<svg viewBox="0 0 24 24" width="18" height="18"><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.8z"/><path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-2.9l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.1 0-5.8-2.1-6.7-5H1.2v3.1C3.2 21.3 7.3 24 12 24z"/><path fill="#FBBC05" d="M5.3 14.3c-.3-.7-.4-1.5-.4-2.3s.1-1.6.4-2.3V6.6H1.2C.4 8.2 0 10 0 12s.4 3.8 1.2 5.4l4.1-3.1z"/><path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4C18 1.2 15.2 0 12 0 7.3 0 3.2 2.7 1.2 6.6l4.1 3.1c.9-2.9 3.6-4.9 6.7-4.9z"/></svg>
 };
 const dotCls = (i)=>"d"+(i%4);
@@ -469,6 +478,7 @@ function Profiles({cid, me, users, couple}){
   const [zoom,setZoom] = useState(null);
   const [annivOpen,setAnnivOpen] = useState(false);
   const [annivVal,setAnnivVal] = useState("");
+  const [colorFor,setColorFor] = useState(null);
   useEffect(()=>db.collection("couples").doc(cid).collection("profiles")
     .onSnapshot(s=>{ const o={}; s.forEach(d=>o[d.id]=d.data()); setProfiles(o); }),[cid]);
   const members = users; // [{uid,name,photo}...] me first
@@ -481,7 +491,7 @@ function Profiles({cid, me, users, couple}){
     {members.map((u,i)=>{
       const p = profiles[u.uid]||{};
       const mine = u.uid===me.uid;
-      return <div key={u.uid} className={"folder "+folderCls(i)} >
+      return <div key={u.uid} className={"folder "+folderCls(p.pcolor!=null? p.pcolor : i)} >
         <span className="tab"></span>
         <div className="row">
           {u.photo ? <img className="avatar" src={u.photo} style={{cursor:"zoom-in"}} onClick={()=>setZoom(u.photo)}/> : <div className="avatar">{mine?"🐹":"🐻"}</div>}
@@ -489,6 +499,7 @@ function Profiles({cid, me, users, couple}){
             <b style={{fontSize:16}}>{p.name || u.name || (mine?"나":"상대방")}</b>
             <div className="sub">{p.bio || "한 줄 소개가 아직 없어요"}</div>
           </div>
+          <button className="icon-btn" style={{width:28,height:28,fontSize:14}} onClick={()=>setColorFor(u.uid)} aria-label="카드 색상">🎨</button>
           {mine && <button className="btn btn-ghost" style={{padding:"7px 12px",fontSize:13}} onClick={openEdit}>수정</button>}
         </div>
         <div className="hr"/>
@@ -508,6 +519,21 @@ function Profiles({cid, me, users, couple}){
     </div>
     {members.length<2 && <p className="sub" style={{marginTop:10}}>커플 연결이 완료되면 상대방 프로필도 여기에 함께 보여요.</p>}
     {zoom && <Lightbox src={zoom} onClose={()=>setZoom(null)}/>}
+    {colorFor && <div className="overlay" onClick={e=>e.target===e.currentTarget&&setColorFor(null)}>
+      <BackTrap onClose={()=>setColorFor(null)}/>
+      <div className="sheet">
+        <div className="row" style={{justifyContent:"space-between"}}><b style={{fontSize:18}}>프로필 카드 색상</b>
+          <button className="icon-btn" onClick={()=>setColorFor(null)}>{I.x}</button></div>
+        <div className="row" style={{gap:14,marginTop:16,justifyContent:"center"}}>
+          {["var(--pink)","var(--mint)","var(--butter)","var(--lav)"].map((cc,i)=>
+            <button key={i} aria-label={"색상 "+(i+1)}
+              onClick={async ()=>{ await db.collection("couples").doc(cid).collection("profiles")
+                  .doc(colorFor).set({pcolor:i},{merge:true}); setColorFor(null); }}
+              style={{width:42,height:42,borderRadius:999,background:cc,flexShrink:0,
+                border:"2px solid #fff",boxShadow:"0 2px 8px rgba(120,90,80,.22)"}}/>)}
+        </div>
+      </div>
+    </div>}
     {annivOpen && <div className="overlay" onClick={e=>e.target===e.currentTarget&&setAnnivOpen(false)}>
       <BackTrap onClose={()=>setAnnivOpen(false)}/>
       <div className="sheet">
@@ -546,9 +572,44 @@ function Links({cid, me, cat, users}){
   useEffect(()=>db.collection("couples").doc(cid).collection("links")
     .where("cat","==",cat).onSnapshot(s=>{
       const a=[]; s.forEach(d=>a.push({id:d.id,...d.data()}));
-      a.sort((x,y)=>(y.ts||0)-(x.ts||0)); setItems(a);
+      const sv = (it)=> it.order!=null? it.order : -(it.ts||0);
+      a.sort((x,y)=> sv(x)-sv(y)); setItems(a);
     }),[cid,cat]);
   useEffect(()=>{ if(post){ const p=items.find(x=>x.id===post.id); setPost(p||null); } },[items]);
+  // 드래그로 순서 바꾸기 (버킷리스트와 동일)
+  const listRef = useRef(); const dragInfo = useRef(null);
+  const [drag,setDrag] = useState(null);
+  const startDrag = (e, idx)=>{
+    if(who!=="all"){ alert('순서 변경은 "전체" 필터에서 할 수 있어요.'); return; }
+    e.preventDefault();
+    const rows = [...listRef.current.querySelectorAll(".lk-item")];
+    const hs = rows.map(r=>r.offsetHeight+10);
+    dragInfo.current = {startY:e.clientY, idx, hs, arr:[...items], cur:idx};
+    setDrag({idx, dy:0});
+    const move = (ev)=>{
+      const info = dragInfo.current; if(!info) return;
+      const dy = ev.clientY - info.startY;
+      let t = info.idx;
+      if(dy>0){ let acc=0; while(t<info.arr.length-1 && dy > acc + info.hs[t+1]/2){ acc+=info.hs[t+1]; t++; } }
+      else { let acc=0; while(t>0 && -dy > acc + info.hs[t-1]/2){ acc+=info.hs[t-1]; t--; } }
+      if(t!==info.cur){
+        const arr=[...info.arr]; const [x]=arr.splice(info.idx,1); arr.splice(t,0,x);
+        const [hh]=info.hs.splice(info.idx,1); info.hs.splice(t,0,hh);
+        info.preview=arr; info.arr=arr; info.cur=t; info.idx=t; info.startY=ev.clientY;
+        setItems(arr); setDrag({idx:t, dy:0});
+      } else setDrag(d=>d?{...d,dy}:null);
+    };
+    const up = ()=>{
+      window.removeEventListener("pointermove",move); window.removeEventListener("pointerup",up);
+      const info=dragInfo.current; dragInfo.current=null; setDrag(null);
+      if(info && info.preview){
+        const batch = db.batch();
+        info.preview.forEach((it,i)=>batch.update(db.collection("couples").doc(cid).collection("links").doc(it.id),{order:(i+1)*10}));
+        batch.commit();
+      }
+    };
+    window.addEventListener("pointermove",move); window.addEventListener("pointerup",up);
+  };
   const userOf = (uid)=>users.find(x=>x.uid===uid);
   const add = async ()=>{
     let u = url.trim(); if(!u) return;
@@ -598,8 +659,10 @@ function Links({cid, me, cat, users}){
     </div>
     {shown.length===0 && <p className="sub" style={{textAlign:"center",marginTop:30}}>
       {items.length===0 ? <>아직 담아둔 게 없어요.<br/>같이 보고 싶은 것, 듣고 싶은 것의 링크를 추가해 보세요!</> : "이 필터에 해당하는 항목이 없어요."}</p>}
-    {shown.map(it=> it.type==="photo" ?
-      <div key={it.id} className="card" style={{padding:0,overflow:"hidden",marginTop:10}}>
+    <div ref={listRef}>
+    {shown.map((it,idx)=> it.type==="photo" ?
+      <div key={it.id} className={"card lk-item"+(drag&&drag.idx===idx?" dragging":"")}
+        style={{padding:0,overflow:"hidden",marginTop:10, ...(drag&&drag.idx===idx?{transform:"translateY("+drag.dy+"px)"}:{})}}>
         <img src={it.image} style={{width:"100%",display:"block",maxHeight:380,objectFit:"cover",cursor:"pointer"}} onClick={()=>setPost(it)}/>
         <div style={{padding:"10px 14px 12px"}}>
           {it.title && <div style={{fontSize:14,marginBottom:4,whiteSpace:"pre-wrap"}}>{it.title}</div>}
@@ -609,12 +672,14 @@ function Links({cid, me, cat, users}){
               <button className="sub" onClick={()=>setPost(it)}>💬 {it.cmtCount>0? "댓글 "+it.cmtCount : "댓글"}</button>
               <button className="sub" onClick={()=>setEdit({...it})}>수정</button>
               <button className="sub" onClick={()=>del(it.id)}>삭제</button>
+              <span className="handle" onPointerDown={e=>startDrag(e,idx)} aria-label="순서 바꾸기">⠿</span>
             </span>
           </div>
         </div>
       </div>
       :
-      <div key={it.id} style={{position:"relative"}}>
+      <div key={it.id} className={"lk-item"+(drag&&drag.idx===idx?" dragging":"")}
+        style={{position:"relative", ...(drag&&drag.idx===idx?{transform:"translateY("+drag.dy+"px)"}:{})}}>
         <a className="linkcard" href={it.url} target="_blank" rel="noreferrer">
           <img src={it.image||favicon(it.url)} onError={e=>{e.target.src=favicon(it.url);}}/>
           <div style={{padding:"10px 66px 10px 0",flex:1}}>
@@ -628,7 +693,9 @@ function Links({cid, me, cat, users}){
         <button className="icon-btn" style={{position:"absolute",top:8,right:42,width:28,height:28}}
           onClick={()=>setEdit({...it})} aria-label="수정">{I.pencil}</button>
         <button className="icon-btn" style={{position:"absolute",top:8,right:8,width:28,height:28}} onClick={()=>del(it.id)} aria-label="삭제">{I.x}</button>
+        <span className="handle" style={{position:"absolute",right:12,bottom:6}} onPointerDown={e=>startDrag(e,idx)} aria-label="순서 바꾸기">⠿</span>
       </div>)}
+    </div>
     {photoForm && <div className="overlay" onClick={e=>e.target===e.currentTarget&&setPhotoForm(null)}>
       <BackTrap onClose={()=>setPhotoForm(null)}/>
       <div className="sheet">
@@ -744,11 +811,15 @@ function CalendarView({cid, me, diaries, onWrite, onOpen}){
   const saveEv = async ()=>{
     if(!evForm.title.trim()){ alert("일정 제목을 적어주세요!"); return; }
     if(evForm.endDate && evForm.endDate<evForm.date){ alert("종료 날짜가 시작 날짜보다 빨라요!"); return; }
-    await db.collection("couples").doc(cid).collection("events").add({
+    const data = {
       date:evForm.date, endDate:(evForm.endDate && evForm.endDate>evForm.date)? evForm.endDate : "",
-      title:evForm.title.trim(), memo:(evForm.memo||"").trim(), by:me.uid, ts:Date.now()});
+      title:evForm.title.trim(), memo:(evForm.memo||"").trim()};
+    const col = db.collection("couples").doc(cid).collection("events");
+    if(evForm.id) await col.doc(evForm.id).update(data);
+    else await col.add({...data, by:me.uid, ts:Date.now()});
     setEvForm(null);
   };
+  const editEv = (e)=> setEvForm({id:e.id, date:e.date, endDate:e.endDate||"", title:e.title, memo:e.memo||""});
   const delEv = (id)=>{ if(confirm("이 일정을 삭제할까요?")) db.collection("couples").doc(cid).collection("events").doc(id).delete(); };
   return <div className="fade-in">
     <div className="title-xl serif">Calendar</div>
@@ -790,6 +861,7 @@ function CalendarView({cid, me, diaries, onWrite, onOpen}){
         <span>📌</span>
         <div className="grow"><b style={{fontSize:14}}>{e.title}</b>
           <div className="sub" style={{color:"#5B7E93"}}>{e.endDate? fmtMD(e.date)+" ~ "+fmtMD(e.endDate) : ""}{e.memo? (e.endDate? " · ":"")+e.memo : ""}</div></div>
+        <button className="sub" style={{fontSize:11,color:"#5B7E93"}} onClick={()=>editEv(e)}>수정</button>
         <button className="sub" style={{fontSize:11,color:"#5B7E93"}} onClick={()=>delEv(e.id)}>삭제</button>
       </div>)}
       {selList.length===0 && selEv.length===0 && <p className="sub" style={{margin:"12px 0 4px"}}>이 날의 기록이 아직 없어요.</p>}
@@ -806,13 +878,14 @@ function CalendarView({cid, me, diaries, onWrite, onOpen}){
         <span className="chip" style={{background:"var(--blue)",color:"#3F7088",fontWeight:700,minWidth:56,textAlign:"center"}}>{dday(e)}</span>
         <div className="grow"><b style={{fontSize:14}}>{e.title}</b>
           <div className="sub">{fmtK(e.date)} ({dayK(e.date)}){e.endDate? " ~ "+fmtMD(e.endDate)+" ("+dayK(e.endDate)+")" : ""}{e.memo? " · "+e.memo : ""}</div></div>
+        <button className="sub" style={{fontSize:11}} onClick={()=>editEv(e)}>수정</button>
         <button className="sub" style={{fontSize:11}} onClick={()=>delEv(e.id)}>삭제</button>
       </div>)}
     </div>
     {evForm && <div className="overlay" onClick={e=>e.target===e.currentTarget&&setEvForm(null)}>
       <BackTrap onClose={()=>setEvForm(null)}/>
       <div className="sheet">
-        <div className="row" style={{justifyContent:"space-between"}}><b style={{fontSize:18}} className="serif">일정 추가</b>
+        <div className="row" style={{justifyContent:"space-between"}}><b style={{fontSize:18}} className="serif">{evForm.id? "일정 수정" : "일정 추가"}</b>
           <button className="icon-btn" onClick={()=>setEvForm(null)}>{I.x}</button></div>
         <div style={{marginTop:12}}><div className="sub" style={{marginBottom:4}}>시작 날짜</div>
           <input type="date" value={evForm.date} onChange={e=>setEvForm({...evForm,date:e.target.value})}/></div>
@@ -1272,6 +1345,7 @@ function Shell({me}){
   const [openId,setOpenId] = useState(null);
   const [tick,setTick] = useState(0);
   const [emojiOpen,setEmojiOpen] = useState(false);
+  const [notiOpen,setNotiOpen] = useState(false);
   const refresh = ()=>setTick(t=>t+1);
 
   // ensure user & couple docs
@@ -1355,13 +1429,37 @@ function Shell({me}){
   const hasNew = tab!=="diary" && diaries.some(d=>
     ((d.ts||0)>seen && d.by!==me.uid) ||
     ((d.lastCmt||0)>seen && d.lastCmtBy && d.lastCmtBy!==me.uid));
+  // 앱 내 알림 목록 (상대방의 새 일기·댓글)
+  const nameOfM = (uid)=>{ const u=usersM.find(x=>x.uid===uid); return u? (u.name||"상대방") : "상대방"; };
+  const notis = diaries.flatMap(d=>{
+    const a=[];
+    if(d.by!==me.uid && d.ts) a.push({t:d.ts, type:"diary", id:d.id,
+      msg: nameOfM(d.by)+"님이 새 일기를 작성했어요", sub: (d.title||"제목 없음")+" · "+fmtK(d.date)});
+    if(d.lastCmtBy && d.lastCmtBy!==me.uid && d.lastCmt) a.push({t:d.lastCmt, type:"cmt", id:d.id,
+      msg: nameOfM(d.lastCmtBy)+"님이 댓글을 남겼어요", sub: d.title||fmtK(d.date)});
+    return a;
+  }).sort((x,y)=>y.t-x.t).slice(0,30);
+  const seenN = userDoc.seenNoti||0;
+  const unreadN = notis.filter(n=>n.t>seenN).length;
+  const openNoti = ()=>{
+    setNotiOpen(true);
+    const now = Date.now();
+    db.collection("users").doc(me.uid).update({seenNoti: now}).catch(()=>{});
+    setUserDoc(u=> u? {...u, seenNoti: now} : u);
+  };
   return <>
     <div className="wrap">
       <div className="row" style={{justifyContent:"space-between",marginBottom:6}}>
         <span className="logo" style={{fontSize:22}}>date<span className="a">:a</span></span>
-        <span className="sub row" style={{gap:4}}>{userDoc.name}{solo && " · 연결 대기중"}
-          <button onClick={()=>setEmojiOpen(true)} aria-label="이모지 변경"
-            style={{fontSize:17,lineHeight:1,padding:"2px 4px"}}>{userDoc.emoji||"💗"}</button></span>
+        <span className="row" style={{gap:8}}>
+          <button className="icon-btn" style={{width:30,height:30,position:"relative"}} onClick={openNoti} aria-label="알림">
+            {I.bell}
+            {unreadN>0 && <span className="ndot" style={{top:1,right:1}}/>}
+          </button>
+          <span className="sub row" style={{gap:4}}>{userDoc.name}{solo && " · 연결 대기중"}
+            <button onClick={()=>setEmojiOpen(true)} aria-label="이모지 변경"
+              style={{fontSize:17,lineHeight:1,padding:"2px 4px"}}>{userDoc.emoji||"💗"}</button></span>
+        </span>
       </div>
       {solo && tab!=="account" && <div style={{marginBottom:10}}>
         <CoupleCard couple={couple} me={me} onJoined={refresh}/>
@@ -1382,6 +1480,24 @@ function Shell({me}){
         {n.id==="diary" && hasNew && <span className="ndot"/>}
       </button>)}
     </nav>
+    {notiOpen && <div className="overlay" onClick={e=>e.target===e.currentTarget&&setNotiOpen(false)}>
+      <BackTrap onClose={()=>setNotiOpen(false)}/>
+      <div className="sheet">
+        <div className="row" style={{justifyContent:"space-between"}}><b style={{fontSize:18}}>알림 🔔</b>
+          <button className="icon-btn" onClick={()=>setNotiOpen(false)}>{I.x}</button></div>
+        {notis.length===0 && <p className="sub" style={{textAlign:"center",marginTop:26}}>아직 알림이 없어요.<br/>상대방이 일기나 댓글을 쓰면 여기에 떠요!</p>}
+        {notis.map((n,i)=><button key={n.id+"-"+n.type+"-"+n.t} className="row"
+          style={{width:"100%",textAlign:"left",background: n.t>seenN? "var(--pink-soft)":"#fff",
+            borderRadius:14,padding:"11px 13px",marginTop:8,boxShadow:"var(--shadow)"}}
+          onClick={()=>{ setOpenId(n.id); setTab("diary"); setNotiOpen(false); }}>
+          <span style={{fontSize:19}}>{n.type==="diary"? "📖" : "💬"}</span>
+          <div className="grow">
+            <div style={{fontSize:14}}>{n.msg}</div>
+            <div className="sub">{n.sub} · {relTime(n.t)}</div>
+          </div>
+        </button>)}
+      </div>
+    </div>}
     {emojiOpen && <div className="overlay" onClick={e=>e.target===e.currentTarget&&setEmojiOpen(false)}>
       <BackTrap onClose={()=>setEmojiOpen(false)}/>
       <div className="sheet">
