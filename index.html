@@ -1298,7 +1298,21 @@ function BucketView({cid, me}){
 }
 
 /* ---------- Account ---------- */
-function AccountView({me, userDoc, couple, users, refresh}){
+function AccountView({me, userDoc, couple, users, refresh, cid}){
+  // 저장 공간 사용량 추정 (일기 + Interests 데이터 크기 합산)
+  const [usage,setUsage] = useState(null);
+  useEffect(()=>{ (async ()=>{
+    try{
+      const [ds, ls] = await Promise.all([
+        db.collection("couples").doc(cid).collection("diaries").get(),
+        db.collection("couples").doc(cid).collection("links").get()
+      ]);
+      let bytes = 0;
+      ds.forEach(d=>{ bytes += JSON.stringify(d.data()).length; });
+      ls.forEach(d=>{ bytes += JSON.stringify(d.data()).length; });
+      setUsage(bytes);
+    }catch(e){ setUsage(-1); }
+  })(); },[cid]);
   const [nick,setNick] = useState(userDoc.name||"");
   const [msg,setMsg] = useState(""); const [err,setErr] = useState("");
   const [curPw,setCurPw] = useState(""); const [newPw,setNewPw] = useState("");
@@ -1356,6 +1370,28 @@ function AccountView({me, userDoc, couple, users, refresh}){
             <div className="grow"><b>{partner.name}</b><div className="sub">연결 완료 💗</div></div>
           </div>
         : <CoupleCard couple={couple} me={me} onJoined={refresh}/>}
+    </div>
+
+    <div className="card" style={{marginTop:12}}>
+      <b>저장 공간 📦</b>
+      {usage===null && <div className="sub" style={{marginTop:8}}>계산 중…</div>}
+      {usage===-1 && <div className="sub" style={{marginTop:8}}>사용량을 불러오지 못했어요.</div>}
+      {usage>=0 && (()=>{
+        const GB = 1073741824;
+        const pct = Math.min(100, usage/GB*100);
+        const mb = (usage/1048576).toFixed(1);
+        return <>
+          <div style={{background:"var(--line)",borderRadius:999,height:10,marginTop:12,overflow:"hidden"}}>
+            <div style={{width:pct.toFixed(1)+"%",minWidth:pct>0?"4px":"0",height:"100%",borderRadius:999,
+              background: pct>80? "#E88888" : "var(--pink-deep)"}}/>
+          </div>
+          <div className="row" style={{justifyContent:"space-between",marginTop:6}}>
+            <span className="sub">{mb} MB 사용 중</span>
+            <span className="sub">무료 제공 약 1GB의 {pct<0.1? "0.1% 미만" : pct.toFixed(1)+"%"}</span>
+          </div>
+          <div className="sub" style={{marginTop:6}}>사진은 자동 압축되어 저장돼요. 80%가 넘어가면 알려주세요 — 사진 저장 방식을 무료 외부 저장소로 넓혀드릴 수 있어요.</div>
+        </>;
+      })()}
     </div>
 
     <div className="card" style={{marginTop:12}}>
@@ -1531,7 +1567,7 @@ function Shell({me}){
         editorDate={editorDate} clearEditorDate={()=>setEditorDate(null)}
         openId={openId} clearOpenId={()=>setOpenId(null)}/>}
       {tab==="bucket" && <BucketView cid={cid} me={me}/>}
-      {tab==="account" && <AccountView me={me} userDoc={userDoc} couple={couple} users={usersM} refresh={refresh}/>}
+      {tab==="account" && <AccountView me={me} userDoc={userDoc} couple={couple} users={usersM} refresh={refresh} cid={cid}/>}
     </div>
     <nav className="nav">
       {NAV.map(n=><button key={n.id} className={tab===n.id?"on":""} onClick={()=>setTab(n.id)}>
