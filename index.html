@@ -372,24 +372,25 @@ function BackTrap({
 }
 const EMOJIS = ["💗", "💕", "💖", "💘", "🥰", "😍", "😘", "🫶", "🐹", "🐻", "🐶", "🐱", "🌸", "🌷", "🌼", "🍀", "✨", "⭐", "🌙", "🎀", "🦋", "🧸", "💌", "🍑"];
 const annivDays = s => Math.floor((new Date(todayStr() + "T00:00:00") - new Date(s + "T00:00:00")) / 86400000) + 1;
-const PCOLORS = [{
-  name: "핑크",
+/* 색상 선택지는 테마와 무관한 고정 7색으로 통일 */
+const CARD_COLORS = [{
+  name: "베이비 핑크",
   bg: "#FDEBF1",
   tab: "#F8C8DC"
 }, {
-  name: "피치",
+  name: "피치크림",
   bg: "#FFF1E6",
   tab: "#FFE1CC"
 }, {
-  name: "버터",
+  name: "버터옐로우",
   bg: "#FFF6DD",
   tab: "#FDE7B2"
 }, {
-  name: "민트",
+  name: "민트그린",
   bg: "#EAF7F4",
   tab: "#C7EDE6"
 }, {
-  name: "블루",
+  name: "베이비블루",
   bg: "#EAF5F9",
   tab: "#CDE7F0"
 }, {
@@ -397,14 +398,15 @@ const PCOLORS = [{
   bg: "#F5EEFA",
   tab: "#E6D6F2"
 }, {
-  name: "오렌지",
-  bg: "#FFF3E7",
-  tab: "#FFD9B5"
-}, {
-  name: "화이트",
-  bg: "#FFFFFF",
-  tab: "#E8E0D8"
+  name: "아이보리",
+  bg: "#FFFCF5",
+  tab: "#EAE0CE"
 }];
+const cardCol = i => CARD_COLORS[(i == null ? 0 : i) % CARD_COLORS.length];
+const ivoryBorder = pc => pc.name === "아이보리" ? {
+  border: "1.5px solid var(--line)"
+} : {};
+const PCOLORS = CARD_COLORS;
 const relTime = t => {
   const s = Math.floor((Date.now() - t) / 1000);
   if (s < 60) return "방금 전";
@@ -1170,15 +1172,13 @@ function Profiles({
   return /*#__PURE__*/React.createElement("div", null, members.map((u, i) => {
     const p = profiles[u.uid] || {};
     const mine = u.uid === me.uid;
-    const pc = PCOLORS[(p.pcolor != null ? p.pcolor : mine ? 0 : 3) % PCOLORS.length];
+    const pc = cardCol(p.pcolor != null ? p.pcolor : mine ? 0 : 3);
     return /*#__PURE__*/React.createElement("div", {
       key: u.uid,
       className: "folder",
       style: {
         background: pc.bg,
-        ...(pc.bg === "#FFFFFF" ? {
-          border: "1.5px solid var(--line)"
-        } : {})
+        ...ivoryBorder(pc)
       }
     }, /*#__PURE__*/React.createElement("span", {
       className: "tab",
@@ -1330,7 +1330,7 @@ function Profiles({
       borderRadius: 999,
       background: pc.tab,
       flexShrink: 0,
-      border: pc.tab === "#E8E0D8" ? "2px solid var(--line)" : "2px solid #fff",
+      border: pc.name === "아이보리" ? "2px solid var(--line)" : "2px solid #fff",
       boxShadow: "0 2px 8px rgba(120,90,80,.22)"
     }
   }))), /*#__PURE__*/React.createElement("div", {
@@ -1339,7 +1339,7 @@ function Profiles({
       textAlign: "center",
       marginTop: 10
     }
-  }, "\uD551\uD06C \xB7 \uD53C\uCE58 \xB7 \uBC84\uD130 \xB7 \uBBFC\uD2B8 \xB7 \uBE14\uB8E8 \xB7 \uB77C\uBCA4\uB354 \xB7 \uC624\uB80C\uC9C0 \xB7 \uD654\uC774\uD2B8"))), annivOpen && /*#__PURE__*/React.createElement("div", {
+  }, "\uBCA0\uC774\uBE44 \uD551\uD06C \xB7 \uD53C\uCE58\uD06C\uB9BC \xB7 \uBC84\uD130\uC610\uB85C\uC6B0 \xB7 \uBBFC\uD2B8\uADF8\uB9B0 \xB7 \uBCA0\uC774\uBE44\uBE14\uB8E8 \xB7 \uB77C\uBCA4\uB354 \xB7 \uC544\uC774\uBCF4\uB9AC"))), annivOpen && /*#__PURE__*/React.createElement("div", {
     className: "overlay",
     onClick: e => e.target === e.currentTarget && setAnnivOpen(false)
   }, /*#__PURE__*/React.createElement(BackTrap, {
@@ -2224,7 +2224,9 @@ function CalendarView({
       className: "dots"
     }, list.slice(0, 3).map((dd, j) => /*#__PURE__*/React.createElement("i", {
       key: j,
-      className: dotCls(dd.color != null ? dd.color : j)
+      style: {
+        background: cardCol(dd.color != null ? dd.color : j).tab
+      }
     })), evs.length > 0 && /*#__PURE__*/React.createElement("i", {
       className: "d-ev"
     })));
@@ -2246,7 +2248,7 @@ function CalendarView({
       width: 10,
       height: 5,
       borderRadius: 3,
-      background: "var(--pink)",
+      background: "#F8C8DC",
       display: "inline-block"
     }
   }), "\uC77C\uAE30"), /*#__PURE__*/React.createElement("span", {
@@ -2330,21 +2332,29 @@ function CalendarView({
     style: {
       margin: "12px 0 4px"
     }
-  }, "\uC774 \uB0A0\uC758 \uAE30\uB85D\uC774 \uC544\uC9C1 \uC5C6\uC5B4\uC694."), selList.map((d, i) => /*#__PURE__*/React.createElement("div", {
-    key: d.id,
-    className: "folder " + folderCls(d.color != null ? d.color : i),
-    style: {
-      cursor: "pointer"
-    },
-    onClick: () => onOpen(d)
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "tab"
-  }), /*#__PURE__*/React.createElement("b", null, d.title || "제목 없음"), d.place && /*#__PURE__*/React.createElement("div", {
-    className: "sub row",
-    style: {
-      gap: 4
-    }
-  }, I.pin, d.place)))), /*#__PURE__*/React.createElement("div", {
+  }, "\uC774 \uB0A0\uC758 \uAE30\uB85D\uC774 \uC544\uC9C1 \uC5C6\uC5B4\uC694."), selList.map((d, i) => {
+    const pc = cardCol(d.color != null ? d.color : i);
+    return /*#__PURE__*/React.createElement("div", {
+      key: d.id,
+      className: "folder",
+      style: {
+        cursor: "pointer",
+        background: pc.bg,
+        ...ivoryBorder(pc)
+      },
+      onClick: () => onOpen(d)
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "tab",
+      style: {
+        background: pc.tab
+      }
+    }), /*#__PURE__*/React.createElement("b", null, d.title || "제목 없음"), d.place && /*#__PURE__*/React.createElement("div", {
+      className: "sub row",
+      style: {
+        gap: 4
+      }
+    }, I.pin, d.place));
+  })), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       marginTop: 12
@@ -2693,45 +2703,53 @@ function DiaryView({
       className: "grow"
     }), /*#__PURE__*/React.createElement("span", {
       className: "sub"
-    }, open ? "▾" : "▸")), open && list.map((d, i) => /*#__PURE__*/React.createElement("div", {
-      key: d.id,
-      className: "folder " + folderCls(d.color != null ? d.color : i),
-      style: {
-        cursor: "pointer"
-      },
-      onClick: () => setDetail(d)
-    }, /*#__PURE__*/React.createElement("span", {
-      className: "tab"
-    }), /*#__PURE__*/React.createElement("div", {
-      className: "sub"
-    }, fmtK(d.date), " (", dayK(d.date), ")"), /*#__PURE__*/React.createElement("b", {
-      style: {
-        fontSize: 16
-      }
-    }, d.title || "제목 없음"), d.place && /*#__PURE__*/React.createElement("div", {
-      className: "sub row",
-      style: {
-        gap: 4
-      }
-    }, I.pin, d.place), d.photos && d.photos.length > 0 && /*#__PURE__*/React.createElement("div", {
-      className: "pgrid",
-      style: {
-        marginTop: 10
-      }
-    }, d.photos.slice(0, 3).map((p, j) => /*#__PURE__*/React.createElement("img", {
-      key: j,
-      src: p
-    }))), d.content && /*#__PURE__*/React.createElement("p", {
-      style: {
-        margin: "8px 0 0",
-        fontSize: 14,
-        color: "#6E645C",
-        display: "-webkit-box",
-        WebkitLineClamp: 2,
-        WebkitBoxOrient: "vertical",
-        overflow: "hidden"
-      }
-    }, d.content))));
+    }, open ? "▾" : "▸")), open && list.map((d, i) => {
+      const pc = cardCol(d.color != null ? d.color : i);
+      return /*#__PURE__*/React.createElement("div", {
+        key: d.id,
+        className: "folder",
+        style: {
+          cursor: "pointer",
+          background: pc.bg,
+          ...ivoryBorder(pc)
+        },
+        onClick: () => setDetail(d)
+      }, /*#__PURE__*/React.createElement("span", {
+        className: "tab",
+        style: {
+          background: pc.tab
+        }
+      }), /*#__PURE__*/React.createElement("div", {
+        className: "sub"
+      }, fmtK(d.date), " (", dayK(d.date), ")"), /*#__PURE__*/React.createElement("b", {
+        style: {
+          fontSize: 16
+        }
+      }, d.title || "제목 없음"), d.place && /*#__PURE__*/React.createElement("div", {
+        className: "sub row",
+        style: {
+          gap: 4
+        }
+      }, I.pin, d.place), d.photos && d.photos.length > 0 && /*#__PURE__*/React.createElement("div", {
+        className: "pgrid",
+        style: {
+          marginTop: 10
+        }
+      }, d.photos.slice(0, 3).map((p, j) => /*#__PURE__*/React.createElement("img", {
+        key: j,
+        src: p
+      }))), d.content && /*#__PURE__*/React.createElement("p", {
+        style: {
+          margin: "8px 0 0",
+          fontSize: 14,
+          color: "#6E645C",
+          display: "-webkit-box",
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden"
+        }
+      }, d.content));
+    }));
   })) : /*#__PURE__*/React.createElement(React.Fragment, null, photos.length === 0 && /*#__PURE__*/React.createElement("p", {
     className: "sub",
     style: {
@@ -2839,7 +2857,6 @@ function DiaryEditor({
     setBusy(false);
     close();
   };
-  const CCOLS = ["var(--pink)", "var(--mint)", "var(--butter)", "var(--lav)", "#FFD9B5", "#CDE7F0", "#FFFFFF"];
   return /*#__PURE__*/React.createElement("div", {
     className: "overlay",
     onClick: e => e.target === e.currentTarget && close()
@@ -2914,17 +2931,18 @@ function DiaryEditor({
       gap: 9,
       flexWrap: "wrap"
     }
-  }, CCOLS.map((cc, i) => /*#__PURE__*/React.createElement("button", {
+  }, CARD_COLORS.map((pc, i) => /*#__PURE__*/React.createElement("button", {
     key: i,
-    "aria-label": "색상 " + (i + 1),
+    "aria-label": pc.name,
+    title: pc.name,
     onClick: () => setColor(i),
     style: {
       width: 30,
       height: 30,
       borderRadius: 999,
-      background: cc,
+      background: pc.tab,
       flexShrink: 0,
-      border: color === i ? "3px solid var(--pink-deep)" : cc === "#FFFFFF" ? "2px solid var(--line)" : "2px solid #fff",
+      border: color === i ? "3px solid #C96B85" : pc.name === "아이보리" ? "2px solid var(--line)" : "2px solid #fff",
       boxShadow: "0 2px 6px rgba(120,90,80,.18)"
     }
   })))), /*#__PURE__*/React.createElement("div", {
@@ -3683,7 +3701,6 @@ function PlanForm({
   onClose
 }) {
   const [f, setF] = useState(init);
-  const CCOLS = ["var(--pink)", "var(--mint)", "var(--butter)", "var(--lav)", "#FFD9B5", "#CDE7F0", "#FFFFFF"];
   const save = async () => {
     if (!f.title.trim()) {
       alert("이름을 적어주세요!");
@@ -3812,20 +3829,21 @@ function PlanForm({
       gap: 9,
       flexWrap: "wrap"
     }
-  }, CCOLS.map((cc, i) => /*#__PURE__*/React.createElement("button", {
+  }, CARD_COLORS.map((pc, i) => /*#__PURE__*/React.createElement("button", {
     key: i,
     onClick: () => setF({
       ...f,
       color: i
     }),
-    "aria-label": "색상 " + (i + 1),
+    "aria-label": pc.name,
+    title: pc.name,
     style: {
       width: 30,
       height: 30,
       borderRadius: 999,
-      background: cc,
+      background: pc.tab,
       flexShrink: 0,
-      border: (f.color || 0) === i ? "3px solid var(--pink-deep)" : cc === "#FFFFFF" ? "2px solid var(--line)" : "2px solid #fff",
+      border: (f.color || 0) === i ? "3px solid #C96B85" : pc.name === "아이보리" ? "2px solid var(--line)" : "2px solid #fff",
       boxShadow: "0 2px 6px rgba(120,90,80,.18)"
     }
   })))), /*#__PURE__*/React.createElement("div", {
@@ -4958,15 +4976,21 @@ function PlanView({
     className: "plan-grid"
   }, plans.map((p, i) => {
     const tp = PLAN_TYPES[p.type] || PLAN_TYPES.etc;
+    const pc = cardCol(p.color != null ? p.color : i);
     return /*#__PURE__*/React.createElement("div", {
       key: p.id,
-      className: "folder p" + (p.color != null ? p.color : i) % 7,
+      className: "folder",
       style: {
-        cursor: "pointer"
+        cursor: "pointer",
+        background: pc.bg,
+        ...ivoryBorder(pc)
       },
       onClick: () => setOpenId(p.id)
     }, /*#__PURE__*/React.createElement("span", {
-      className: "tab"
+      className: "tab",
+      style: {
+        background: pc.tab
+      }
     }), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 22
