@@ -66,7 +66,7 @@ input[type="date"]{-webkit-appearance:none;appearance:none;max-width:100%;}
 .nav{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);
   display:flex;justify-content:space-around;padding:8px 6px calc(8px + env(safe-area-inset-bottom));z-index:40;}
 .nav button{display:flex;flex-direction:column;align-items:center;gap:2px;color:#BDB3AA;
-  font-size:10.5px;padding:6px 10px;border-radius:14px;position:relative;}
+  font-size:10px;padding:6px 6px;border-radius:14px;position:relative;}
 .ndot{position:absolute;width:8px;height:8px;border-radius:999px;background:#F26D6D;}
 .nav .ndot{top:3px;right:10px;}
 .handle{color:#D8CFC7;font-size:18px;cursor:grab;padding:4px 2px;touch-action:none;user-select:none;}
@@ -139,6 +139,16 @@ svg:not([width]){width:20px;height:20px;}
 .code{font-size:30px;letter-spacing:.18em;font-weight:700;font-family:'Gowun Batang',serif;}
 .comment{background:#fff;border-radius:14px;padding:10px 12px;margin-top:8px;}
 .err{color:#D65C5C;font-size:13px;margin-top:8px;}
+.plan-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;}
+.plan-grid .folder{margin-top:8px;min-height:104px;}
+.mkr{background:var(--pink-deep);color:#fff;border-radius:999px;width:26px;height:26px;
+  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;
+  border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);}
+.stopnum{background:var(--pink-soft);color:var(--rose);border-radius:999px;width:24px;height:24px;
+  display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;}
+.st-item{display:flex;align-items:center;gap:10px;background:#fff;border-radius:14px;
+  box-shadow:var(--shadow);padding:10px 12px;margin-top:8px;user-select:none;}
+.st-item.dragging{opacity:.93;position:relative;z-index:5;box-shadow:0 12px 30px rgba(120,90,80,.25);}
 </style>
 </head>
 <body>
@@ -311,6 +321,21 @@ const relTime = (t)=>{ const s=Math.floor((Date.now()-t)/1000);
   if(s<60) return "방금 전"; const m=Math.floor(s/60); if(m<60) return m+"분 전";
   const h=Math.floor(m/60); if(h<24) return h+"시간 전"; const d=Math.floor(h/24); if(d<7) return d+"일 전";
   return new Date(t).toLocaleDateString("ko-KR",{month:"numeric",day:"numeric"}); };
+let _leafletP = null;
+function loadLeaflet(){
+  if(window.L) return Promise.resolve();
+  if(_leafletP) return _leafletP;
+  _leafletP = new Promise((res,rej)=>{
+    const l = document.createElement("link"); l.rel="stylesheet";
+    l.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+    document.head.appendChild(l);
+    const s = document.createElement("script");
+    s.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+    s.onload = res; s.onerror = rej;
+    document.head.appendChild(s);
+  });
+  return _leafletP;
+}
 
 /* ---------- themes & lightbox ---------- */
 const THEMES = {
@@ -1297,6 +1322,408 @@ function BucketView({cid, me}){
   </div>;
 }
 
+/* ---------- Plan (여행·프로젝트) ---------- */
+const PLAN_TYPES = { travel:{label:"여행", emoji:"✈️"}, etc:{label:"기타 프로젝트", emoji:"📁"} };
+const fmtMD2 = (s)=>{ if(!s) return ""; const p=s.split("-"); return (+p[1])+"/"+(+p[2]); };
+
+function PlanMap({stops}){
+  const el = useRef(); const mapRef = useRef(); const layerRef = useRef();
+  useEffect(()=>{
+    let alive = true;
+    loadLeaflet().then(()=>{
+      if(!alive || !el.current) return;
+      if(!mapRef.current){
+        mapRef.current = L.map(el.current,{scrollWheelZoom:false});
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap"}).addTo(mapRef.current);
+        layerRef.current = L.layerGroup().addTo(mapRef.current);
+        setTimeout(()=>{ mapRef.current && mapRef.current.invalidateSize(); },200);
+      }
+      const lg = layerRef.current; lg.clearLayers();
+      const pts = stops.filter(s=>s.lat && s.lng);
+      pts.forEach((s,i)=>{
+        L.marker([s.lat,s.lng],{icon:L.divIcon({className:"",html:'<div class="mkr">'+(i+1)+'</div>',iconSize:[26,26],iconAnchor:[13,13]})})
+          .addTo(lg).bindPopup((i+1)+". "+(s.name||""));
+      });
+      if(pts.length>1) L.polyline(pts.map(s=>[s.lat,s.lng]),{color:"#E1889E",weight:3,dashArray:"6 6"}).addTo(lg);
+      if(pts.length) mapRef.current.fitBounds(pts.map(s=>[s.lat,s.lng]),{padding:[34,34],maxZoom:15});
+    });
+    return ()=>{ alive=false; };
+  },[stops]);
+  useEffect(()=>()=>{ if(mapRef.current){ mapRef.current.remove(); mapRef.current=null; } },[]);
+  return <div ref={el} style={{height:230,borderRadius:16,overflow:"hidden",marginTop:10,position:"relative",zIndex:0,background:"var(--line)"}}/>;
+}
+
+function MapPicker({initial, onPick, onClose}){
+  const mapEl = useRef(); const mapRef = useRef(); const markRef = useRef();
+  const [q,setQ] = useState(""); const [res,setRes] = useState([]);
+  const [sel,setSel] = useState(initial||null); const [busy,setBusy] = useState(false);
+  const place = (lat,lng)=>{
+    setSel({lat,lng});
+    if(!mapRef.current) return;
+    if(markRef.current) markRef.current.setLatLng([lat,lng]);
+    else markRef.current = L.marker([lat,lng],{icon:L.divIcon({className:"",html:'<div class="mkr">📍</div>',iconSize:[26,26],iconAnchor:[13,13]})}).addTo(mapRef.current);
+  };
+  useEffect(()=>{
+    let alive = true;
+    loadLeaflet().then(()=>{
+      if(!alive || mapRef.current || !mapEl.current) return;
+      const m = L.map(mapEl.current).setView(initial? [initial.lat,initial.lng] : [36.5,127.8], initial? 15 : 7);
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap"}).addTo(m);
+      m.on("click", e=>place(e.latlng.lat, e.latlng.lng));
+      mapRef.current = m;
+      if(initial) place(initial.lat, initial.lng);
+      setTimeout(()=>m.invalidateSize(),250);
+    });
+    return ()=>{ alive=false; if(mapRef.current){ mapRef.current.remove(); mapRef.current=null; } };
+  },[]);
+  const search = async ()=>{
+    if(!q.trim()) return; setBusy(true);
+    try{
+      const r = await fetch("https://nominatim.openstreetmap.org/search?format=json&accept-language=ko&limit=6&q="+encodeURIComponent(q.trim()));
+      setRes(await r.json());
+    }catch(e){ setRes([]); }
+    setBusy(false);
+  };
+  return <div className="overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+    <BackTrap onClose={onClose}/>
+    <div className="sheet">
+      <div className="row" style={{justifyContent:"space-between"}}><b style={{fontSize:18}}>위치 지정 🗺️</b>
+        <button className="icon-btn" onClick={onClose}>{I.x}</button></div>
+      <div className="row" style={{marginTop:10}}>
+        <input placeholder="장소·주소 검색 (예: 대전역, 한밭수목원)" value={q}
+          onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()}/>
+        <button className="btn btn-primary" style={{width:"auto",whiteSpace:"nowrap"}} disabled={busy} onClick={search}>{busy?"…":"검색"}</button>
+      </div>
+      {res.length>0 && <div style={{marginTop:8}}>
+        {res.map((r,i)=><button key={i} className="row" style={{width:"100%",textAlign:"left",background:"#fff",
+            borderRadius:12,padding:"9px 12px",marginTop:6,boxShadow:"var(--shadow)"}}
+          onClick={()=>{ place(+r.lat,+r.lon); mapRef.current.setView([+r.lat,+r.lon],15); setRes([]); }}>
+          <span>📍</span><span style={{fontSize:13}} className="grow">{r.display_name}</span>
+        </button>)}
+      </div>}
+      <div className="sub" style={{marginTop:8}}>검색이 안 잡히면 지도를 직접 눌러 핀을 찍어도 돼요!</div>
+      <div ref={mapEl} style={{height:280,borderRadius:16,overflow:"hidden",marginTop:8,position:"relative",zIndex:0,background:"var(--line)"}}/>
+      <button className="btn btn-primary" style={{marginTop:14}} disabled={!sel}
+        onClick={()=>{ onPick(sel); onClose(); }}>{sel? "이 위치로 지정하기" : "지도를 눌러 위치를 골라주세요"}</button>
+    </div>
+  </div>;
+}
+
+function PlanForm({cid, me, init, onClose}){
+  const [f,setF] = useState(init);
+  const CCOLS = ["var(--pink)","var(--mint)","var(--butter)","var(--lav)"];
+  const save = async ()=>{
+    if(!f.title.trim()){ alert("이름을 적어주세요!"); return; }
+    if(f.dateStart && f.dateEnd && f.dateEnd<f.dateStart){ alert("종료 날짜가 시작 날짜보다 빨라요!"); return; }
+    const data = { type:f.type, title:f.title.trim(), dest:(f.dest||"").trim(),
+      dateStart:f.dateStart||"", dateEnd:f.dateEnd||"", color:f.color||0, memo:f.memo||"" };
+    const col = db.collection("couples").doc(cid).collection("plans");
+    if(f.id) await col.doc(f.id).update(data);
+    else await col.add({...data, by:me.uid, ts:Date.now()});
+    onClose();
+  };
+  return <div className="overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+    <BackTrap onClose={onClose}/>
+    <div className="sheet">
+      <div className="row" style={{justifyContent:"space-between"}}>
+        <b style={{fontSize:18}} className="serif">{PLAN_TYPES[f.type].emoji} {f.id? "수정" : PLAN_TYPES[f.type].label+" 추가"}</b>
+        <button className="icon-btn" onClick={onClose}>{I.x}</button></div>
+      <div style={{marginTop:12}}><div className="sub" style={{marginBottom:4}}>이름</div>
+        <input placeholder={f.type==="travel"? "예: 대전 여행 🧳" : "예: 자취 준비 프로젝트"} value={f.title} onChange={e=>setF({...f,title:e.target.value})}/></div>
+      {f.type==="travel" && <div style={{marginTop:10}}><div className="sub" style={{marginBottom:4}}>목적지</div>
+        <input placeholder="예: 대전" value={f.dest||""} onChange={e=>setF({...f,dest:e.target.value})}/></div>}
+      <div className="row" style={{marginTop:10,gap:8}}>
+        <div className="grow"><div className="sub" style={{marginBottom:4}}>시작 날짜</div>
+          <input type="date" value={f.dateStart||""} onChange={e=>setF({...f,dateStart:e.target.value})}/></div>
+        <div className="grow"><div className="sub" style={{marginBottom:4}}>종료 날짜</div>
+          <input type="date" value={f.dateEnd||""} onChange={e=>setF({...f,dateEnd:e.target.value})}/></div>
+      </div>
+      <div style={{marginTop:10}}><div className="sub" style={{marginBottom:4}}>폴더 색상</div>
+        <div className="row" style={{gap:10}}>
+          {CCOLS.map((cc,i)=><button key={i} onClick={()=>setF({...f,color:i})} aria-label={"색상 "+(i+1)}
+            style={{width:30,height:30,borderRadius:999,background:cc,flexShrink:0,
+              border:(f.color||0)===i? "3px solid var(--pink-deep)":"2px solid #fff",
+              boxShadow:"0 2px 6px rgba(120,90,80,.18)"}}/>)}
+        </div></div>
+      <div style={{marginTop:10}}><div className="sub" style={{marginBottom:4}}>메모</div>
+        <textarea style={{minHeight:70}} placeholder="예산, 준비물, 아이디어 등" value={f.memo||""} onChange={e=>setF({...f,memo:e.target.value})}/></div>
+      <button className="btn btn-primary" style={{marginTop:16}} onClick={save}>저장하기</button>
+    </div>
+  </div>;
+}
+
+const TR_KINDS = ["✈️ 항공","🚄 기차","🚌 버스","🚗 렌터카·자차","🛳️ 배","🎫 기타"];
+function PlanDetail({cid, me, plan, back, onEdit}){
+  const pref = ()=>db.collection("couples").doc(cid).collection("plans").doc(plan.id);
+  const [stops,setStops] = useState([]);
+  const [trans,setTrans] = useState([]);
+  const [day,setDay] = useState(0);
+  const [stopForm,setStopForm] = useState(null);
+  const [trForm,setTrForm] = useState(null);
+  const [picker,setPicker] = useState(false);
+  useEffect(()=>pref().collection("stops").onSnapshot(s=>{
+    const a=[]; s.forEach(d=>a.push({id:d.id,...d.data()}));
+    a.sort((x,y)=> ((x.day||0)-(y.day||0)) || ((x.order||0)-(y.order||0))); setStops(a); }),[plan.id]);
+  useEffect(()=>pref().collection("transports").onSnapshot(s=>{
+    const a=[]; s.forEach(d=>a.push({id:d.id,...d.data()}));
+    a.sort((x,y)=> ((x.date||"")<(y.date||"")? -1 : 1)); setTrans(a); }),[plan.id]);
+  const dayList = useMemo(()=>{
+    if(plan.dateStart && plan.dateEnd && plan.dateEnd>=plan.dateStart){
+      const a=[]; let d=new Date(plan.dateStart+"T00:00:00");
+      const stop=new Date(plan.dateEnd+"T00:00:00"); let g=0;
+      while(d<=stop && g<31){
+        a.push(d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"));
+        d.setDate(d.getDate()+1); g++;
+      }
+      return a.length>1? a : null;
+    }
+    return null;
+  },[plan.dateStart,plan.dateEnd]);
+  const curDay = dayList? Math.min(day, dayList.length-1) : 0;
+  const dayStops = stops.filter(s=>(s.day||0)===curDay);
+
+  // 동선 드래그 순서 변경
+  const listRef = useRef(); const dragInfo = useRef(null);
+  const [drag,setDrag] = useState(null);
+  const startDrag = (e, idx)=>{
+    e.preventDefault();
+    const rows = [...listRef.current.querySelectorAll(".st-item")];
+    const hs = rows.map(r=>r.offsetHeight+8);
+    dragInfo.current = {startY:e.clientY, idx, hs, arr:[...dayStops], cur:idx};
+    setDrag({idx, dy:0});
+    const move = (ev)=>{
+      const info = dragInfo.current; if(!info) return;
+      const dy = ev.clientY - info.startY;
+      let t = info.idx;
+      if(dy>0){ let acc=0; while(t<info.arr.length-1 && dy > acc + info.hs[t+1]/2){ acc+=info.hs[t+1]; t++; } }
+      else { let acc=0; while(t>0 && -dy > acc + info.hs[t-1]/2){ acc+=info.hs[t-1]; t--; } }
+      if(t!==info.cur){
+        const arr=[...info.arr]; const [x]=arr.splice(info.idx,1); arr.splice(t,0,x);
+        const [hh]=info.hs.splice(info.idx,1); info.hs.splice(t,0,hh);
+        info.preview=arr; info.arr=arr; info.cur=t; info.idx=t; info.startY=ev.clientY;
+        setDrag({idx:t, dy:0});
+      } else setDrag(d=>d?{...d,dy}:null);
+    };
+    const up = ()=>{
+      window.removeEventListener("pointermove",move); window.removeEventListener("pointerup",up);
+      const info=dragInfo.current; dragInfo.current=null; setDrag(null);
+      if(info && info.preview){
+        const batch = db.batch();
+        info.preview.forEach((s,i)=>batch.update(pref().collection("stops").doc(s.id),{order:(i+1)*10}));
+        batch.commit();
+      }
+    };
+    window.addEventListener("pointermove",move); window.addEventListener("pointerup",up);
+  };
+  const previewStops = drag && dragInfo.current && dragInfo.current.preview? dragInfo.current.preview : dayStops;
+
+  const saveStop = async ()=>{
+    if(!stopForm.name.trim()){ alert("장소 이름을 적어주세요!"); return; }
+    const data = { name:stopForm.name.trim(), time:stopForm.time||"", memo:(stopForm.memo||"").trim(),
+      lat:stopForm.lat||null, lng:stopForm.lng||null, day:curDay };
+    const col = pref().collection("stops");
+    if(stopForm.id) await col.doc(stopForm.id).update(data);
+    else {
+      const maxOrder = dayStops.reduce((m,s)=>Math.max(m, s.order||0), 0);
+      await col.add({...data, order:maxOrder+10, by:me.uid, ts:Date.now()});
+    }
+    setStopForm(null);
+  };
+  const delStop = async ()=>{
+    if(!confirm("이 장소를 삭제할까요?")) return;
+    await pref().collection("stops").doc(stopForm.id).delete();
+    setStopForm(null);
+  };
+  const saveTr = async ()=>{
+    if(!trForm.title.trim()){ alert("내용을 적어주세요! (예: KTX 서울→대전 09:20)"); return; }
+    const data = { kind:trForm.kind, title:trForm.title.trim(), date:trForm.date||"", memo:(trForm.memo||"").trim() };
+    const col = pref().collection("transports");
+    if(trForm.id) await col.doc(trForm.id).update(data);
+    else await col.add({...data, by:me.uid, ts:Date.now()});
+    setTrForm(null);
+  };
+  const delTr = async ()=>{
+    if(!confirm("이 교통편을 삭제할까요?")) return;
+    await pref().collection("transports").doc(trForm.id).delete();
+    setTrForm(null);
+  };
+  const delPlan = async ()=>{
+    if(!confirm('"'+plan.title+'" 전체를 삭제할까요? 동선·교통편도 함께 지워져요.')) return;
+    const [ss, ts] = await Promise.all([pref().collection("stops").get(), pref().collection("transports").get()]);
+    const batch = db.batch();
+    ss.forEach(d=>batch.delete(d.ref)); ts.forEach(d=>batch.delete(d.ref));
+    batch.delete(pref());
+    await batch.commit();
+    back();
+  };
+  const tp = PLAN_TYPES[plan.type]||PLAN_TYPES.etc;
+  return <div className="fade-in">
+    <BackTrap onClose={back}/>
+    <div className="row" style={{marginBottom:4}}>
+      <button className="icon-btn" onClick={back} aria-label="뒤로">‹</button>
+      <div className="grow">
+        <b className="serif" style={{fontSize:20}}>{tp.emoji} {plan.title}</b>
+        <div className="sub">
+          {plan.dateStart? fmtK(plan.dateStart)+(plan.dateEnd&&plan.dateEnd!==plan.dateStart? " ~ "+fmtMD2(plan.dateEnd) : "") : tp.label}
+          {plan.dest? " · "+plan.dest : ""}
+        </div>
+      </div>
+      <button className="icon-btn" onClick={onEdit} aria-label="수정">{I.pencil}</button>
+      <button className="icon-btn" onClick={delPlan} aria-label="삭제">{I.x}</button>
+    </div>
+    {plan.memo && <div className="card" style={{marginTop:10,background:"var(--butter-soft)",boxShadow:"none"}}>
+      <div className="sub" style={{marginBottom:2}}>메모</div>
+      <div style={{whiteSpace:"pre-wrap",fontSize:14}}>{plan.memo}</div>
+    </div>}
+
+    <div className="card" style={{marginTop:12}}>
+      <div className="row" style={{justifyContent:"space-between"}}>
+        <b>동선 🧭</b>
+        <button className="btn btn-ghost" style={{padding:"7px 11px",fontSize:13}}
+          onClick={()=>setStopForm({name:"",time:"",memo:"",lat:null,lng:null})}>+ 장소</button>
+      </div>
+      {dayList && <div className="tabs" style={{marginTop:10}}>
+        {dayList.map((d,i)=><button key={d} className={curDay===i?"on":""} onClick={()=>setDay(i)}>
+          Day{i+1} · {fmtMD2(d)}</button>)}
+      </div>}
+      {previewStops.filter(s=>s.lat&&s.lng).length>0 && <PlanMap stops={previewStops}/>}
+      <div ref={listRef} style={{marginTop:4}}>
+        {previewStops.map((s,idx)=>
+          <div key={s.id} className={"st-item"+(drag&&drag.idx===idx?" dragging":"")}
+            style={drag&&drag.idx===idx?{transform:"translateY("+drag.dy+"px)"}:{}}>
+            <span className="stopnum">{idx+1}</span>
+            <div className="grow" style={{cursor:"pointer"}} onClick={()=>setStopForm({...s})}>
+              <b style={{fontSize:14}}>{s.name}</b>{s.lat&&s.lng && <span style={{fontSize:12}}> 📍</span>}
+              <div className="sub">{s.time? s.time+" " : ""}{s.memo||""}</div>
+            </div>
+            <span className="handle" onPointerDown={e=>startDrag(e,idx)} aria-label="순서 바꾸기">⠿</span>
+          </div>)}
+      </div>
+      {dayStops.length===0 && <p className="sub" style={{textAlign:"center",margin:"18px 0 8px"}}>
+        {dayList? "이 날의 동선을 추가해 보세요!" : "가고 싶은 곳을 순서대로 추가해 보세요!"}<br/>장소를 누르면 수정, ⠿를 잡으면 순서 변경이 돼요.</p>}
+    </div>
+
+    <div className="card" style={{marginTop:12}}>
+      <div className="row" style={{justifyContent:"space-between"}}>
+        <b>교통편 🎫</b>
+        <button className="btn btn-ghost" style={{padding:"7px 11px",fontSize:13}}
+          onClick={()=>setTrForm({kind:TR_KINDS[1],title:"",date:plan.dateStart||"",memo:""})}>+ 교통편</button>
+      </div>
+      {trans.map(t=><div key={t.id} className="row" style={{marginTop:10,cursor:"pointer"}} onClick={()=>setTrForm({...t})}>
+        <span style={{fontSize:18}}>{(t.kind||"🎫").split(" ")[0]}</span>
+        <div className="grow"><b style={{fontSize:14}}>{t.title}</b>
+          <div className="sub">{t.date? fmtK(t.date)+(t.memo? " · ":"") : ""}{t.memo||""}</div></div>
+        <span className="sub">›</span>
+      </div>)}
+      {trans.length===0 && <p className="sub" style={{margin:"12px 0 4px"}}>항공권·기차표·렌터카 예약 정보를 기록해 두세요.</p>}
+    </div>
+
+    {stopForm && <div className="overlay" onClick={e=>e.target===e.currentTarget&&setStopForm(null)}>
+      <BackTrap onClose={()=>setStopForm(null)}/>
+      <div className="sheet">
+        <div className="row" style={{justifyContent:"space-between"}}><b style={{fontSize:18}}>{stopForm.id? "장소 수정":"장소 추가"}{dayList? " · Day"+(curDay+1) : ""}</b>
+          <button className="icon-btn" onClick={()=>setStopForm(null)}>{I.x}</button></div>
+        <div style={{marginTop:12}}><div className="sub" style={{marginBottom:4}}>장소 이름</div>
+          <input placeholder="예: 성심당 본점" value={stopForm.name} onChange={e=>setStopForm({...stopForm,name:e.target.value})}/></div>
+        <div style={{marginTop:10}}><div className="sub" style={{marginBottom:4}}>시간 (선택)</div>
+          <input type="time" value={stopForm.time||""} onChange={e=>setStopForm({...stopForm,time:e.target.value})}/></div>
+        <div style={{marginTop:10}}><div className="sub" style={{marginBottom:4}}>메모 (선택)</div>
+          <input placeholder="예: 튀김소보로 꼭 사기!" value={stopForm.memo||""} onChange={e=>setStopForm({...stopForm,memo:e.target.value})}/></div>
+        <div className="row" style={{marginTop:12,gap:8}}>
+          <button className="btn btn-line grow" onClick={()=>setPicker(true)}>
+            {stopForm.lat? "📍 위치 지정됨 · 변경하기" : "🗺️ 지도에서 위치 지정 (선택)"}</button>
+          {stopForm.lat && <button className="sub" style={{whiteSpace:"nowrap"}}
+            onClick={()=>setStopForm({...stopForm,lat:null,lng:null})}>지우기</button>}
+        </div>
+        <div className="row" style={{marginTop:14,gap:8}}>
+          {stopForm.id && <button className="btn btn-line" style={{color:"#D65C5C"}} onClick={delStop}>삭제</button>}
+          <button className="btn btn-primary grow" onClick={saveStop}>저장하기</button>
+        </div>
+      </div>
+    </div>}
+    {picker && <MapPicker initial={stopForm&&stopForm.lat? {lat:stopForm.lat,lng:stopForm.lng} : null}
+      onPick={(p)=>setStopForm(sf=>({...sf, lat:p.lat, lng:p.lng}))} onClose={()=>setPicker(false)}/>}
+
+    {trForm && <div className="overlay" onClick={e=>e.target===e.currentTarget&&setTrForm(null)}>
+      <BackTrap onClose={()=>setTrForm(null)}/>
+      <div className="sheet">
+        <div className="row" style={{justifyContent:"space-between"}}><b style={{fontSize:18}}>{trForm.id? "교통편 수정":"교통편 추가"}</b>
+          <button className="icon-btn" onClick={()=>setTrForm(null)}>{I.x}</button></div>
+        <div style={{marginTop:12}}><div className="sub" style={{marginBottom:4}}>종류</div>
+          <select value={trForm.kind} onChange={e=>setTrForm({...trForm,kind:e.target.value})}>
+            {TR_KINDS.map(k=><option key={k} value={k}>{k}</option>)}
+          </select></div>
+        <div style={{marginTop:10}}><div className="sub" style={{marginBottom:4}}>내용</div>
+          <input placeholder="예: KTX 서울 → 대전 09:20 (12호차 3A·3B)" value={trForm.title} onChange={e=>setTrForm({...trForm,title:e.target.value})}/></div>
+        <div style={{marginTop:10}}><div className="sub" style={{marginBottom:4}}>날짜 (선택)</div>
+          <input type="date" value={trForm.date||""} onChange={e=>setTrForm({...trForm,date:e.target.value})}/></div>
+        <div style={{marginTop:10}}><div className="sub" style={{marginBottom:4}}>메모 (선택)</div>
+          <input placeholder="예약번호, 가격 등" value={trForm.memo||""} onChange={e=>setTrForm({...trForm,memo:e.target.value})}/></div>
+        <div className="row" style={{marginTop:14,gap:8}}>
+          {trForm.id && <button className="btn btn-line" style={{color:"#D65C5C"}} onClick={delTr}>삭제</button>}
+          <button className="btn btn-primary grow" onClick={saveTr}>저장하기</button>
+        </div>
+      </div>
+    </div>}
+  </div>;
+}
+
+function PlanView({cid, me}){
+  const [plans,setPlans] = useState([]);
+  const [openId,setOpenId] = useState(null);
+  const [typeSheet,setTypeSheet] = useState(false);
+  const [form,setForm] = useState(null);
+  useEffect(()=>db.collection("couples").doc(cid).collection("plans")
+    .onSnapshot(s=>{ const a=[]; s.forEach(d=>a.push({id:d.id,...d.data()}));
+      a.sort((x,y)=>(y.ts||0)-(x.ts||0)); setPlans(a); }),[cid]);
+  const openPlan = plans.find(p=>p.id===openId);
+  return <>
+    {openPlan
+      ? <PlanDetail cid={cid} me={me} plan={openPlan} back={()=>setOpenId(null)} onEdit={()=>setForm({...openPlan})}/>
+      : <div className="fade-in">
+        <div className="row" style={{justifyContent:"space-between"}}>
+          <div><div className="title-xl serif">Plan</div><div className="sub">함께 세우는 여행·프로젝트 계획</div></div>
+          <button className="btn btn-primary" style={{width:"auto",whiteSpace:"nowrap"}} onClick={()=>setTypeSheet(true)}>+ 추가</button>
+        </div>
+        {plans.length===0 && <p className="sub" style={{textAlign:"center",marginTop:40}}>
+          아직 계획이 없어요.<br/>+ 추가를 눌러 여행 폴더를 만들어 보세요! 🧳</p>}
+        <div className="plan-grid">
+          {plans.map((p,i)=>{
+            const tp = PLAN_TYPES[p.type]||PLAN_TYPES.etc;
+            return <div key={p.id} className={"folder "+folderCls(p.color!=null? p.color : i)}
+              style={{cursor:"pointer"}} onClick={()=>setOpenId(p.id)}>
+              <span className="tab"></span>
+              <div style={{fontSize:22}}>{tp.emoji}</div>
+              <b style={{fontSize:15,display:"block",marginTop:4}}>{p.title}</b>
+              <div className="sub" style={{marginTop:2}}>
+                {p.dateStart? fmtMD2(p.dateStart)+(p.dateEnd&&p.dateEnd!==p.dateStart? " ~ "+fmtMD2(p.dateEnd):"") : tp.label}
+                {p.dest? " · "+p.dest : ""}
+              </div>
+            </div>;
+          })}
+        </div>
+      </div>}
+    {typeSheet && <div className="overlay" onClick={e=>e.target===e.currentTarget&&setTypeSheet(false)}>
+      <BackTrap onClose={()=>setTypeSheet(false)}/>
+      <div className="sheet">
+        <div className="row" style={{justifyContent:"space-between"}}><b style={{fontSize:18}}>무엇을 추가할까요?</b>
+          <button className="icon-btn" onClick={()=>setTypeSheet(false)}>{I.x}</button></div>
+        {Object.entries(PLAN_TYPES).map(([k,t])=>
+          <button key={k} className="row" style={{width:"100%",background:"#fff",borderRadius:16,padding:"16px 16px",
+              marginTop:10,boxShadow:"var(--shadow)",textAlign:"left"}}
+            onClick={()=>{ setTypeSheet(false);
+              setForm({type:k, title:"", dest:"", dateStart:"", dateEnd:"", color: k==="travel"?0:2, memo:""}); }}>
+            <span style={{fontSize:24}}>{t.emoji}</span>
+            <div className="grow"><b>{t.label}</b>
+              <div className="sub">{k==="travel"? "기간·목적지·동선·교통편까지 한 폴더에" : "함께하는 모든 프로젝트를 자유롭게"}</div></div>
+            <span className="sub">›</span>
+          </button>)}
+      </div>
+    </div>}
+    {form && <PlanForm cid={cid} me={me} init={form} onClose={()=>setForm(null)}/>}
+  </>;
+}
+
 /* ---------- Account ---------- */
 function AccountView({me, userDoc, couple, users, refresh, cid}){
   // 저장 공간 사용량 추정 (일기 + Interests 데이터 크기 합산)
@@ -1427,6 +1854,7 @@ const NAV = [
   {id:"interests", label:"Interests", icon:I.heart},
   {id:"calendar", label:"Calendar", icon:I.cal},
   {id:"diary", label:"Diary", icon:I.book},
+  {id:"plan", label:"Plan", icon:I.pin},
   {id:"bucket", label:"Bucket", icon:I.check},
   {id:"account", label:"Account", icon:I.user}
 ];
@@ -1566,6 +1994,7 @@ function Shell({me}){
       {tab==="diary" && <DiaryView cid={cid} me={me} users={usersM} diaries={diaries}
         editorDate={editorDate} clearEditorDate={()=>setEditorDate(null)}
         openId={openId} clearOpenId={()=>setOpenId(null)}/>}
+      {tab==="plan" && <PlanView cid={cid} me={me}/>}
       {tab==="bucket" && <BucketView cid={cid} me={me}/>}
       {tab==="account" && <AccountView me={me} userDoc={userDoc} couple={couple} users={usersM} refresh={refresh} cid={cid}/>}
     </div>
