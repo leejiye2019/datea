@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="UTF-8" />
@@ -19,7 +19,7 @@
 <style>
 :root{
   --bg:#FAF7F2; --card:#FFFFFF; --ink:#4A423C; --sub:#A79C93; --line:#F0E8DF;
-  --pink:#F8C8DC; --pink-soft:#FDEBF1; --pink-deep:#E1889E; --rose:#C96B85;
+  --pink:#FFD3E4; --pink-soft:#FFEFF5; --pink-deep:#F293B4; --rose:#D66F92;
   --mint:#C7EDE6; --mint-soft:#EAF7F4; --mint-deep:#5FBFAE;
   --butter:#FDE7B2; --butter-soft:#FFF6DD;
   --lav:#E6D6F2; --lav-soft:#F5EEFA;
@@ -375,36 +375,43 @@ const annivDays = s => Math.floor((new Date(todayStr() + "T00:00:00") - new Date
 /* 색상 선택지는 테마와 무관한 고정 7색으로 통일 */
 const CARD_COLORS = [{
   name: "베이비 핑크",
-  bg: "#FDEBF1",
-  tab: "#F8C8DC"
+  bg: "#FFEFF5",
+  tab: "#FFD3E4",
+  line: "#F6B8D0"
 }, {
   name: "피치크림",
   bg: "#FFF1E6",
-  tab: "#FFE1CC"
+  tab: "#FFE1CC",
+  line: "#F5C9A5"
 }, {
   name: "버터옐로우",
   bg: "#FFF6DD",
-  tab: "#FDE7B2"
+  tab: "#FDE7B2",
+  line: "#EFD48F"
 }, {
   name: "민트그린",
   bg: "#EAF7F4",
-  tab: "#C7EDE6"
+  tab: "#C7EDE6",
+  line: "#A3DBD0"
 }, {
   name: "베이비블루",
   bg: "#EAF5F9",
-  tab: "#CDE7F0"
+  tab: "#CDE7F0",
+  line: "#A9D2E2"
 }, {
   name: "라벤더",
   bg: "#F5EEFA",
-  tab: "#E6D6F2"
+  tab: "#E6D6F2",
+  line: "#CDB6E4"
 }, {
   name: "아이보리",
   bg: "#FFFCF5",
-  tab: "#EAE0CE"
+  tab: "#EAE0CE",
+  line: "#DCCFB4"
 }];
 const cardCol = i => CARD_COLORS[(i == null ? 0 : i) % CARD_COLORS.length];
 const ivoryBorder = pc => pc.name === "아이보리" ? {
-  border: "1.5px solid var(--line)"
+  border: "1.5px solid " + pc.line
 } : {};
 const PCOLORS = CARD_COLORS;
 const relTime = t => {
@@ -443,10 +450,10 @@ function loadLeaflet() {
 const THEMES = {
   pink: {
     name: "블러시 핑크",
-    pink: "#F8C8DC",
-    soft: "#FDEBF1",
-    deep: "#E1889E",
-    rose: "#C96B85"
+    pink: "#FFD3E4",
+    soft: "#FFEFF5",
+    deep: "#F293B4",
+    rose: "#D66F92"
   },
   peach: {
     name: "피치 크림",
@@ -1178,7 +1185,7 @@ function Profiles({
       className: "folder",
       style: {
         background: pc.bg,
-        ...ivoryBorder(pc)
+        border: "1.5px solid " + pc.line
       }
     }, /*#__PURE__*/React.createElement("span", {
       className: "tab",
@@ -1205,10 +1212,13 @@ function Profiles({
     }, p.name || u.name || (mine ? "나" : "상대방")), /*#__PURE__*/React.createElement("div", {
       className: "sub"
     }, p.bio || "한 줄 소개가 아직 없어요")), mine && /*#__PURE__*/React.createElement("button", {
-      className: "btn btn-ghost",
+      className: "btn",
       style: {
         padding: "7px 12px",
-        fontSize: 13
+        fontSize: 13,
+        background: "#fff",
+        border: "1.5px solid var(--line)",
+        color: "var(--rose)"
       },
       onClick: openEdit
     }, "\uC218\uC815"), /*#__PURE__*/React.createElement("button", {
@@ -1330,7 +1340,7 @@ function Profiles({
       borderRadius: 999,
       background: pc.tab,
       flexShrink: 0,
-      border: pc.name === "아이보리" ? "2px solid var(--line)" : "2px solid #fff",
+      border: "2px solid #fff",
       boxShadow: "0 2px 8px rgba(120,90,80,.22)"
     }
   }))), /*#__PURE__*/React.createElement("div", {
@@ -2942,7 +2952,7 @@ function DiaryEditor({
       borderRadius: 999,
       background: pc.tab,
       flexShrink: 0,
-      border: color === i ? "3px solid #C96B85" : pc.name === "아이보리" ? "2px solid var(--line)" : "2px solid #fff",
+      border: color === i ? "3px solid #C96B85" : "2px solid #fff",
       boxShadow: "0 2px 6px rgba(120,90,80,.18)"
     }
   })))), /*#__PURE__*/React.createElement("div", {
@@ -3448,33 +3458,23 @@ function BucketView({
     onClick: () => toggle(it),
     "aria-label": "\uB2EC\uC131 \uCCB4\uD06C"
   }, it.done ? "✓" : ""), /*#__PURE__*/React.createElement("span", {
-    className: "txt grow"
-  }, it.text, it.done && it.doneDate && /*#__PURE__*/React.createElement("button", {
+    className: "txt grow",
+    style: it.done ? {
+      cursor: "pointer"
+    } : {},
+    onClick: it.done ? () => setDateSheet({
+      id: it.id,
+      date: it.doneDate || todayStr(),
+      editing: true
+    }) : undefined
+  }, it.text, it.done && it.doneDate && /*#__PURE__*/React.createElement("span", {
     className: "sub",
     style: {
       display: "block",
       fontSize: 11,
-      textAlign: "left",
-      padding: 0,
       textDecoration: "none"
-    },
-    onClick: () => setDateSheet({
-      id: it.id,
-      date: it.doneDate,
-      editing: true
-    })
-  }, "\uD83C\uDF89 ", fmtK(it.doneDate), " \uB2EC\uC131")), it.done && !it.doneDate && /*#__PURE__*/React.createElement("button", {
-    className: "sub",
-    style: {
-      fontSize: 11,
-      whiteSpace: "nowrap"
-    },
-    onClick: () => setDateSheet({
-      id: it.id,
-      date: todayStr(),
-      editing: true
-    })
-  }, "+\uB0A0\uC9DC"), /*#__PURE__*/React.createElement("button", {
+    }
+  }, "\uD83C\uDF89 ", fmtK(it.doneDate), " \uB2EC\uC131")), /*#__PURE__*/React.createElement("button", {
     className: "sub",
     style: {
       fontSize: 11
@@ -3939,7 +3939,7 @@ function PlanForm({
       borderRadius: 999,
       background: pc.tab,
       flexShrink: 0,
-      border: (f.color || 0) === i ? "3px solid #C96B85" : pc.name === "아이보리" ? "2px solid var(--line)" : "2px solid #fff",
+      border: (f.color || 0) === i ? "3px solid #C96B85" : "2px solid #fff",
       boxShadow: "0 2px 6px rgba(120,90,80,.18)"
     }
   })))), /*#__PURE__*/React.createElement("div", {
@@ -5289,8 +5289,8 @@ function AccountView({
   }, me.email), /*#__PURE__*/React.createElement("div", {
     className: "chip",
     style: {
-      background: "var(--lav-soft)",
-      color: "#8A6FA8",
+      background: "var(--pink-soft)",
+      color: "var(--rose)",
       marginTop: 4
     }
   }, isPwUser ? "이메일 로그인" : "Google 로그인 연결됨"))), /*#__PURE__*/React.createElement("div", {

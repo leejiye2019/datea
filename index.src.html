@@ -20,7 +20,7 @@
 <style>
 :root{
   --bg:#FAF7F2; --card:#FFFFFF; --ink:#4A423C; --sub:#A79C93; --line:#F0E8DF;
-  --pink:#F8C8DC; --pink-soft:#FDEBF1; --pink-deep:#E1889E; --rose:#C96B85;
+  --pink:#FFD3E4; --pink-soft:#FFEFF5; --pink-deep:#F293B4; --rose:#D66F92;
   --mint:#C7EDE6; --mint-soft:#EAF7F4; --mint-deep:#5FBFAE;
   --butter:#FDE7B2; --butter-soft:#FFF6DD;
   --lav:#E6D6F2; --lav-soft:#F5EEFA;
@@ -315,16 +315,16 @@ const EMOJIS = ["💗","💕","💖","💘","🥰","😍","😘","🫶","🐹","
 const annivDays = (s)=> Math.floor((new Date(todayStr()+"T00:00:00") - new Date(s+"T00:00:00"))/86400000) + 1;
 /* 색상 선택지는 테마와 무관한 고정 7색으로 통일 */
 const CARD_COLORS = [
-  {name:"베이비 핑크", bg:"#FDEBF1", tab:"#F8C8DC"},
-  {name:"피치크림",   bg:"#FFF1E6", tab:"#FFE1CC"},
-  {name:"버터옐로우", bg:"#FFF6DD", tab:"#FDE7B2"},
-  {name:"민트그린",   bg:"#EAF7F4", tab:"#C7EDE6"},
-  {name:"베이비블루", bg:"#EAF5F9", tab:"#CDE7F0"},
-  {name:"라벤더",     bg:"#F5EEFA", tab:"#E6D6F2"},
-  {name:"아이보리",   bg:"#FFFCF5", tab:"#EAE0CE"}
+  {name:"베이비 핑크", bg:"#FFEFF5", tab:"#FFD3E4", line:"#F6B8D0"},
+  {name:"피치크림",   bg:"#FFF1E6", tab:"#FFE1CC", line:"#F5C9A5"},
+  {name:"버터옐로우", bg:"#FFF6DD", tab:"#FDE7B2", line:"#EFD48F"},
+  {name:"민트그린",   bg:"#EAF7F4", tab:"#C7EDE6", line:"#A3DBD0"},
+  {name:"베이비블루", bg:"#EAF5F9", tab:"#CDE7F0", line:"#A9D2E2"},
+  {name:"라벤더",     bg:"#F5EEFA", tab:"#E6D6F2", line:"#CDB6E4"},
+  {name:"아이보리",   bg:"#FFFCF5", tab:"#EAE0CE", line:"#DCCFB4"}
 ];
 const cardCol = (i)=> CARD_COLORS[(i==null? 0 : i) % CARD_COLORS.length];
-const ivoryBorder = (pc)=> pc.name==="아이보리"? {border:"1.5px solid var(--line)"} : {};
+const ivoryBorder = (pc)=> pc.name==="아이보리"? {border:"1.5px solid "+pc.line} : {};
 const PCOLORS = CARD_COLORS;
 const relTime = (t)=>{ const s=Math.floor((Date.now()-t)/1000);
   if(s<60) return "방금 전"; const m=Math.floor(s/60); if(m<60) return m+"분 전";
@@ -348,7 +348,7 @@ function loadLeaflet(){
 
 /* ---------- themes & lightbox ---------- */
 const THEMES = {
-  pink:  {name:"블러시 핑크", pink:"#F8C8DC", soft:"#FDEBF1", deep:"#E1889E", rose:"#C96B85"},
+  pink:  {name:"블러시 핑크", pink:"#FFD3E4", soft:"#FFEFF5", deep:"#F293B4", rose:"#D66F92"},
   peach: {name:"피치 크림",   pink:"#FFE1CC", soft:"#FFF1E6", deep:"#EFA868", rose:"#C07A3B"},
   butter:{name:"버터 옐로우", pink:"#FDE7B2", soft:"#FFF6DD", deep:"#E0B44A", rose:"#A0801F"},
   mint:  {name:"민트 그린",   pink:"#C7EDE6", soft:"#EAF7F4", deep:"#5FBFAE", rose:"#38907F"},
@@ -564,7 +564,7 @@ function Profiles({cid, me, users, couple}){
       const p = profiles[u.uid]||{};
       const mine = u.uid===me.uid;
       const pc = cardCol(p.pcolor!=null? p.pcolor : (mine? 0 : 3));
-      return <div key={u.uid} className="folder" style={{background:pc.bg, ...ivoryBorder(pc)}}>
+      return <div key={u.uid} className="folder" style={{background:pc.bg, border:"1.5px solid "+pc.line}}>
         <span className="tab" style={{background:pc.tab}}></span>
         <div className="row">
           {u.photo ? <img className="avatar" src={u.photo} style={{cursor:"zoom-in"}} onClick={()=>setZoom(u.photo)}/> : <div className="avatar">{mine?"🐹":"🐻"}</div>}
@@ -572,7 +572,8 @@ function Profiles({cid, me, users, couple}){
             <b style={{fontSize:16}}>{p.name || u.name || (mine?"나":"상대방")}</b>
             <div className="sub">{p.bio || "한 줄 소개가 아직 없어요"}</div>
           </div>
-          {mine && <button className="btn btn-ghost" style={{padding:"7px 12px",fontSize:13}} onClick={openEdit}>수정</button>}
+          {mine && <button className="btn" style={{padding:"7px 12px",fontSize:13,background:"#fff",
+            border:"1.5px solid var(--line)",color:"var(--rose)"}} onClick={openEdit}>수정</button>}
           <button className="icon-btn" style={{width:28,height:28,fontSize:14}} onClick={()=>setColorFor(u.uid)} aria-label="카드 색상">🎨</button>
         </div>
         <div className="hr"/>
@@ -603,7 +604,7 @@ function Profiles({cid, me, users, couple}){
               onClick={async ()=>{ await db.collection("couples").doc(cid).collection("profiles")
                   .doc(colorFor).set({pcolor:i},{merge:true}); setColorFor(null); }}
               style={{width:42,height:42,borderRadius:999,background:pc.tab,flexShrink:0,
-                border: pc.name==="아이보리"? "2px solid var(--line)":"2px solid #fff",
+                border:"2px solid #fff",
                 boxShadow:"0 2px 8px rgba(120,90,80,.22)"}}/>)}
         </div>
         <div className="sub" style={{textAlign:"center",marginTop:10}}>베이비 핑크 · 피치크림 · 버터옐로우 · 민트그린 · 베이비블루 · 라벤더 · 아이보리</div>
@@ -1136,7 +1137,7 @@ function DiaryEditor({cid, me, init, close}){
           {CARD_COLORS.map((pc,i)=><button key={i} aria-label={pc.name} title={pc.name}
             onClick={()=>setColor(i)}
             style={{width:30,height:30,borderRadius:999,background:pc.tab,flexShrink:0,
-              border: color===i? "3px solid #C96B85" : (pc.name==="아이보리"? "2px solid var(--line)":"2px solid #fff"),
+              border: color===i? "3px solid #C96B85" : "2px solid #fff",
               boxShadow:"0 2px 6px rgba(120,90,80,.18)"}}/>)}
         </div></div>
       <div style={{marginTop:10}}><div className="sub" style={{marginBottom:4}}>일기</div>
@@ -1331,12 +1332,10 @@ function BucketView({cid, me}){
         <div key={it.id} className={"bk"+(it.done?" done":"")+(drag&&drag.idx===idx?" dragging":"")}
           style={drag&&drag.idx===idx?{transform:`translateY(${drag.dy}px)`}:{}}>
           <button className="box" onClick={()=>toggle(it)} aria-label="달성 체크">{it.done?"✓":""}</button>
-          <span className="txt grow">{it.text}
-            {it.done && it.doneDate && <button className="sub" style={{display:"block",fontSize:11,textAlign:"left",padding:0,textDecoration:"none"}}
-              onClick={()=>setDateSheet({id:it.id, date:it.doneDate, editing:true})}>🎉 {fmtK(it.doneDate)} 달성</button>}
+          <span className="txt grow" style={it.done? {cursor:"pointer"} : {}}
+            onClick={it.done? ()=>setDateSheet({id:it.id, date: it.doneDate||todayStr(), editing:true}) : undefined}>{it.text}
+            {it.done && it.doneDate && <span className="sub" style={{display:"block",fontSize:11,textDecoration:"none"}}>🎉 {fmtK(it.doneDate)} 달성</span>}
           </span>
-          {it.done && !it.doneDate && <button className="sub" style={{fontSize:11,whiteSpace:"nowrap"}}
-            onClick={()=>setDateSheet({id:it.id, date:todayStr(), editing:true})}>+날짜</button>}
           <button className="sub" style={{fontSize:11}} onClick={()=>del(it)}>삭제</button>
           <span className="handle" onPointerDown={e=>onHandleDown(e,idx)} aria-label="순서 바꾸기">⠿</span>
         </div>)}
@@ -1486,7 +1485,7 @@ function PlanForm({cid, me, init, onClose}){
         <div className="row" style={{gap:9,flexWrap:"wrap"}}>
           {CARD_COLORS.map((pc,i)=><button key={i} onClick={()=>setF({...f,color:i})} aria-label={pc.name} title={pc.name}
             style={{width:30,height:30,borderRadius:999,background:pc.tab,flexShrink:0,
-              border:(f.color||0)===i? "3px solid #C96B85":(pc.name==="아이보리"? "2px solid var(--line)":"2px solid #fff"),
+              border:(f.color||0)===i? "3px solid #C96B85":"2px solid #fff",
               boxShadow:"0 2px 6px rgba(120,90,80,.18)"}}/>)}
         </div></div>
       <div style={{marginTop:10}}><div className="sub" style={{marginBottom:4}}>폴더 아이콘</div>
@@ -1985,7 +1984,7 @@ function AccountView({me, userDoc, couple, users, refresh, cid}){
         <div className="grow">
           <b style={{fontSize:17}}>{userDoc.name}</b>
           <div className="sub">{me.email}</div>
-          <div className="chip" style={{background:"var(--lav-soft)",color:"#8A6FA8",marginTop:4}}>
+          <div className="chip" style={{background:"var(--pink-soft)",color:"var(--rose)",marginTop:4}}>
             {isPwUser? "이메일 로그인":"Google 로그인 연결됨"}</div>
         </div>
       </div>
