@@ -1271,8 +1271,13 @@ function BucketView({cid, me}){
     await db.collection("couples").doc(cid).collection("bucket").add({text:text.trim(),done:false,order:maxOrder+10,by:me.uid,ts:Date.now()});
     setText("");
   };
-  const toggle = (it)=> db.collection("couples").doc(cid).collection("bucket").doc(it.id).update({done:!it.done});
-  const del = (it)=>{ if(confirm("삭제할까요?")) db.collection("couples").doc(cid).collection("bucket").doc(it.id).delete(); };
+  const [dateSheet,setDateSheet] = useState(null); // {id, date, editing}
+  const bref = (id)=> db.collection("couples").doc(cid).collection("bucket").doc(id);
+  const toggle = (it)=>{
+    if(it.done) bref(it.id).update({done:false, doneDate:""});
+    else setDateSheet({id:it.id, date:todayStr(), editing:false});
+  };
+  const del = (it)=>{ if(confirm("삭제할까요?")) bref(it.id).delete(); };
 
   const persistOrder = async (arr)=>{
     const batch = db.batch();
@@ -1326,12 +1331,37 @@ function BucketView({cid, me}){
         <div key={it.id} className={"bk"+(it.done?" done":"")+(drag&&drag.idx===idx?" dragging":"")}
           style={drag&&drag.idx===idx?{transform:`translateY(${drag.dy}px)`}:{}}>
           <button className="box" onClick={()=>toggle(it)} aria-label="달성 체크">{it.done?"✓":""}</button>
-          <span className="txt grow">{it.text}</span>
+          <span className="txt grow">{it.text}
+            {it.done && it.doneDate && <button className="sub" style={{display:"block",fontSize:11,textAlign:"left",padding:0,textDecoration:"none"}}
+              onClick={()=>setDateSheet({id:it.id, date:it.doneDate, editing:true})}>🎉 {fmtK(it.doneDate)} 달성</button>}
+          </span>
+          {it.done && !it.doneDate && <button className="sub" style={{fontSize:11,whiteSpace:"nowrap"}}
+            onClick={()=>setDateSheet({id:it.id, date:todayStr(), editing:true})}>+날짜</button>}
           <button className="sub" style={{fontSize:11}} onClick={()=>del(it)}>삭제</button>
           <span className="handle" onPointerDown={e=>onHandleDown(e,idx)} aria-label="순서 바꾸기">⠿</span>
         </div>)}
     </div>
     {items.length===0 && <p className="sub" style={{textAlign:"center",marginTop:30}}>둘이서 하고 싶은 일들을 하나씩 적어보세요.<br/>달성하면 체크! 순서는 ⠿를 잡고 옮길 수 있어요.</p>}
+    {dateSheet && <div className="overlay" onClick={e=>e.target===e.currentTarget&&setDateSheet(null)}>
+      <BackTrap onClose={()=>setDateSheet(null)}/>
+      <div className="sheet">
+        <div className="row" style={{justifyContent:"space-between"}}>
+          <b style={{fontSize:18}}>{dateSheet.editing? "달성 날짜" : "달성 축하해요! 🎉"}</b>
+          <button className="icon-btn" onClick={()=>setDateSheet(null)}>{I.x}</button></div>
+        <p className="sub" style={{margin:"6px 0 0"}}>언제 이뤘는지 기록해 둘까요? 날짜를 몰라도 괜찮아요.</p>
+        <input type="date" value={dateSheet.date} style={{marginTop:12}}
+          onChange={e=>setDateSheet({...dateSheet, date:e.target.value})}/>
+        <div className="row" style={{marginTop:14,gap:8}}>
+          <button className="btn btn-line grow"
+            onClick={()=>{ bref(dateSheet.id).update({done:true, doneDate:""}); setDateSheet(null); }}>
+            {dateSheet.editing? "날짜 지우기" : "날짜 없이 체크"}</button>
+          <button className="btn btn-primary grow"
+            onClick={()=>{ if(!dateSheet.date){ alert("날짜를 골라주세요!"); return; }
+              bref(dateSheet.id).update({done:true, doneDate:dateSheet.date}); setDateSheet(null); }}>
+            {dateSheet.editing? "저장하기" : "이 날짜로 체크"}</button>
+        </div>
+      </div>
+    </div>}
   </div>;
 }
 
@@ -1689,36 +1719,44 @@ function PlanDetail({cid, me, users, plan, back, onEdit}){
     </div>
 
     <div className="card" style={{marginTop:12}}>
-      <div className="row" style={{justifyContent:"space-between"}}>
-        <b>준비물 🎒</b>
-        <span className="sub">
-          나 {items.filter(i=>i.doneBy&&i.doneBy[me.uid]).length}/{items.length}
-          {partner? " · "+(partner.name||"상대")+" "+items.filter(i=>i.doneBy&&i.doneBy[partner.uid]).length+"/"+items.length : ""}
-        </span>
-      </div>
-      {partner && <div className="sub" style={{marginTop:4,fontSize:12}}>
-        <span style={{color:"var(--rose)"}}>■</span> 왼쪽은 내 체크 · <span style={{color:"#6E9CBD"}}>■</span> 오른쪽은 {partner.name||"상대방"} 체크
-      </div>}
-      <div className="row" style={{marginTop:10}}>
-        <input placeholder="예: 보조배터리, 상비약" value={itemText}
-          onChange={e=>setItemText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addItem()}/>
-        <button className="btn btn-primary" style={{width:"auto",whiteSpace:"nowrap"}} onClick={addItem}>추가</button>
-      </div>
-      {items.map(it=>{
-        const mine = !!(it.doneBy && it.doneBy[me.uid]);
-        const pDone = partner? !!(it.doneBy && it.doneBy[partner.uid]) : false;
-        const both = mine && (partner? pDone : true);
-        return <div key={it.id} className={"bk"+(both?" done":"")} style={{boxShadow:"none",border:"1.5px solid var(--line)"}}>
-          <button className="box" aria-label="내 체크"
-            onClick={()=>pref().collection("items").doc(it.id).update({["doneBy."+me.uid]: !mine})}
-            style={{background: mine? "var(--pink-deep)":"#fff"}}>{mine?"✓":""}</button>
-          {partner && <button className="box" aria-label={(partner.name||"상대방")+" 체크"} disabled
-            style={{borderColor:"#8FB8D6", background: pDone? "#8FB8D6":"#fff", cursor:"default"}}>{pDone?"✓":""}</button>}
-          <span className="txt grow">{it.text}</span>
-          <button className="sub" style={{fontSize:11}} onClick={()=>{ if(confirm("삭제할까요?")) pref().collection("items").doc(it.id).delete(); }}>삭제</button>
-        </div>;
-      })}
-      {items.length===0 && <p className="sub" style={{margin:"12px 0 4px"}}>챙길 것들을 적고, 각자 챙기면 체크해요!</p>}
+      {(()=>{
+        // 두 사람 모두의 화면에서 같은 순서로 보이도록 uid 기준 고정 정렬
+        const cols = (partner? [...users].sort((a,b)=> a.uid<b.uid? -1 : 1) : (users||[]).filter(u=>u.uid===me.uid))
+          .map((u,idx)=>({ uid:u.uid, name:(u.name || (u.uid===me.uid? "나" : "상대방")),
+            color: idx===0? "#E1889E" : "#8FB8D6" }));
+        const cnt = (uid)=> items.filter(i=>i.doneBy&&i.doneBy[uid]).length;
+        return <>
+          <div className="row" style={{justifyContent:"space-between"}}>
+            <b>준비물 🎒</b>
+            <span className="sub">{cols.map(cl=>cl.name+" "+cnt(cl.uid)+"/"+items.length).join(" · ")}</span>
+          </div>
+          {cols.length>1 && <div className="sub" style={{marginTop:4,fontSize:12}}>
+            {cols.map((cl,i)=><span key={cl.uid}>{i>0 && " · "}<span style={{color:cl.color}}>■</span> {i===0? "왼쪽은 ":"오른쪽은 "}{cl.name} 체크{cl.uid===me.uid? " (나)":""}</span>)}
+          </div>}
+          <div className="row" style={{marginTop:10}}>
+            <input placeholder="예: 보조배터리, 상비약" value={itemText}
+              onChange={e=>setItemText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addItem()}/>
+            <button className="btn btn-primary" style={{width:"auto",whiteSpace:"nowrap"}} onClick={addItem}>추가</button>
+          </div>
+          {items.map(it=>{
+            const all = cols.length>0 && cols.every(cl=> it.doneBy && it.doneBy[cl.uid]);
+            return <div key={it.id} className={"bk"+(all?" done":"")} style={{boxShadow:"none",border:"1.5px solid var(--line)"}}>
+              {cols.map(cl=>{
+                const done = !!(it.doneBy && it.doneBy[cl.uid]);
+                const mine = cl.uid===me.uid;
+                return <button key={cl.uid} className="box" disabled={!mine}
+                  aria-label={cl.name+" 체크"}
+                  onClick={mine? ()=>pref().collection("items").doc(it.id).update({["doneBy."+cl.uid]: !done}) : undefined}
+                  style={{borderColor:cl.color, background: done? cl.color : "#fff",
+                    cursor: mine? "pointer" : "default"}}>{done? "✓" : ""}</button>;
+              })}
+              <span className="txt grow">{it.text}</span>
+              <button className="sub" style={{fontSize:11}} onClick={()=>{ if(confirm("삭제할까요?")) pref().collection("items").doc(it.id).delete(); }}>삭제</button>
+            </div>;
+          })}
+          {items.length===0 && <p className="sub" style={{margin:"12px 0 4px"}}>챙길 것들을 적고, 각자 자기 이름 체크박스에 체크해요!</p>}
+        </>;
+      })()}
     </div>
 
     <div className="card" style={{marginTop:12}}>

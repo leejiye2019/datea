@@ -3334,11 +3334,20 @@ function BucketView({
     });
     setText("");
   };
-  const toggle = it => db.collection("couples").doc(cid).collection("bucket").doc(it.id).update({
-    done: !it.done
-  });
+  const [dateSheet, setDateSheet] = useState(null); // {id, date, editing}
+  const bref = id => db.collection("couples").doc(cid).collection("bucket").doc(id);
+  const toggle = it => {
+    if (it.done) bref(it.id).update({
+      done: false,
+      doneDate: ""
+    });else setDateSheet({
+      id: it.id,
+      date: todayStr(),
+      editing: false
+    });
+  };
   const del = it => {
-    if (confirm("삭제할까요?")) db.collection("couples").doc(cid).collection("bucket").doc(it.id).delete();
+    if (confirm("삭제할까요?")) bref(it.id).delete();
   };
   const persistOrder = async arr => {
     const batch = db.batch();
@@ -3440,7 +3449,32 @@ function BucketView({
     "aria-label": "\uB2EC\uC131 \uCCB4\uD06C"
   }, it.done ? "✓" : ""), /*#__PURE__*/React.createElement("span", {
     className: "txt grow"
-  }, it.text), /*#__PURE__*/React.createElement("button", {
+  }, it.text, it.done && it.doneDate && /*#__PURE__*/React.createElement("button", {
+    className: "sub",
+    style: {
+      display: "block",
+      fontSize: 11,
+      textAlign: "left",
+      padding: 0,
+      textDecoration: "none"
+    },
+    onClick: () => setDateSheet({
+      id: it.id,
+      date: it.doneDate,
+      editing: true
+    })
+  }, "\uD83C\uDF89 ", fmtK(it.doneDate), " \uB2EC\uC131")), it.done && !it.doneDate && /*#__PURE__*/React.createElement("button", {
+    className: "sub",
+    style: {
+      fontSize: 11,
+      whiteSpace: "nowrap"
+    },
+    onClick: () => setDateSheet({
+      id: it.id,
+      date: todayStr(),
+      editing: true
+    })
+  }, "+\uB0A0\uC9DC"), /*#__PURE__*/React.createElement("button", {
     className: "sub",
     style: {
       fontSize: 11
@@ -3456,7 +3490,69 @@ function BucketView({
       textAlign: "center",
       marginTop: 30
     }
-  }, "\uB458\uC774\uC11C \uD558\uACE0 \uC2F6\uC740 \uC77C\uB4E4\uC744 \uD558\uB098\uC529 \uC801\uC5B4\uBCF4\uC138\uC694.", /*#__PURE__*/React.createElement("br", null), "\uB2EC\uC131\uD558\uBA74 \uCCB4\uD06C! \uC21C\uC11C\uB294 \u283F\uB97C \uC7A1\uACE0 \uC62E\uAE38 \uC218 \uC788\uC5B4\uC694."));
+  }, "\uB458\uC774\uC11C \uD558\uACE0 \uC2F6\uC740 \uC77C\uB4E4\uC744 \uD558\uB098\uC529 \uC801\uC5B4\uBCF4\uC138\uC694.", /*#__PURE__*/React.createElement("br", null), "\uB2EC\uC131\uD558\uBA74 \uCCB4\uD06C! \uC21C\uC11C\uB294 \u283F\uB97C \uC7A1\uACE0 \uC62E\uAE38 \uC218 \uC788\uC5B4\uC694."), dateSheet && /*#__PURE__*/React.createElement("div", {
+    className: "overlay",
+    onClick: e => e.target === e.currentTarget && setDateSheet(null)
+  }, /*#__PURE__*/React.createElement(BackTrap, {
+    onClose: () => setDateSheet(null)
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "sheet"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "row",
+    style: {
+      justifyContent: "space-between"
+    }
+  }, /*#__PURE__*/React.createElement("b", {
+    style: {
+      fontSize: 18
+    }
+  }, dateSheet.editing ? "달성 날짜" : "달성 축하해요! 🎉"), /*#__PURE__*/React.createElement("button", {
+    className: "icon-btn",
+    onClick: () => setDateSheet(null)
+  }, I.x)), /*#__PURE__*/React.createElement("p", {
+    className: "sub",
+    style: {
+      margin: "6px 0 0"
+    }
+  }, "\uC5B8\uC81C \uC774\uB918\uB294\uC9C0 \uAE30\uB85D\uD574 \uB458\uAE4C\uC694? \uB0A0\uC9DC\uB97C \uBAB0\uB77C\uB3C4 \uAD1C\uCC2E\uC544\uC694."), /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    value: dateSheet.date,
+    style: {
+      marginTop: 12
+    },
+    onChange: e => setDateSheet({
+      ...dateSheet,
+      date: e.target.value
+    })
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "row",
+    style: {
+      marginTop: 14,
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-line grow",
+    onClick: () => {
+      bref(dateSheet.id).update({
+        done: true,
+        doneDate: ""
+      });
+      setDateSheet(null);
+    }
+  }, dateSheet.editing ? "날짜 지우기" : "날짜 없이 체크"), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-primary grow",
+    onClick: () => {
+      if (!dateSheet.date) {
+        alert("날짜를 골라주세요!");
+        return;
+      }
+      bref(dateSheet.id).update({
+        done: true,
+        doneDate: dateSheet.date
+      });
+      setDateSheet(null);
+    }
+  }, dateSheet.editing ? "저장하기" : "이 날짜로 체크")))));
 }
 
 /* ---------- Plan (여행·프로젝트) ---------- */
@@ -4381,90 +4477,94 @@ function PlanDetail({
     style: {
       marginTop: 12
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "row",
-    style: {
-      justifyContent: "space-between"
-    }
-  }, /*#__PURE__*/React.createElement("b", null, "\uC900\uBE44\uBB3C \uD83C\uDF92"), /*#__PURE__*/React.createElement("span", {
-    className: "sub"
-  }, "\uB098 ", items.filter(i => i.doneBy && i.doneBy[me.uid]).length, "/", items.length, partner ? " · " + (partner.name || "상대") + " " + items.filter(i => i.doneBy && i.doneBy[partner.uid]).length + "/" + items.length : "")), partner && /*#__PURE__*/React.createElement("div", {
-    className: "sub",
-    style: {
-      marginTop: 4,
-      fontSize: 12
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: "var(--rose)"
-    }
-  }, "\u25A0"), " \uC67C\uCABD\uC740 \uB0B4 \uCCB4\uD06C \xB7 ", /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: "#6E9CBD"
-    }
-  }, "\u25A0"), " \uC624\uB978\uCABD\uC740 ", partner.name || "상대방", " \uCCB4\uD06C"), /*#__PURE__*/React.createElement("div", {
-    className: "row",
-    style: {
-      marginTop: 10
-    }
-  }, /*#__PURE__*/React.createElement("input", {
-    placeholder: "\uC608: \uBCF4\uC870\uBC30\uD130\uB9AC, \uC0C1\uBE44\uC57D",
-    value: itemText,
-    onChange: e => setItemText(e.target.value),
-    onKeyDown: e => e.key === "Enter" && addItem()
-  }), /*#__PURE__*/React.createElement("button", {
-    className: "btn btn-primary",
-    style: {
-      width: "auto",
-      whiteSpace: "nowrap"
-    },
-    onClick: addItem
-  }, "\uCD94\uAC00")), items.map(it => {
-    const mine = !!(it.doneBy && it.doneBy[me.uid]);
-    const pDone = partner ? !!(it.doneBy && it.doneBy[partner.uid]) : false;
-    const both = mine && (partner ? pDone : true);
-    return /*#__PURE__*/React.createElement("div", {
-      key: it.id,
-      className: "bk" + (both ? " done" : ""),
+  }, (() => {
+    // 두 사람 모두의 화면에서 같은 순서로 보이도록 uid 기준 고정 정렬
+    const cols = (partner ? [...users].sort((a, b) => a.uid < b.uid ? -1 : 1) : (users || []).filter(u => u.uid === me.uid)).map((u, idx) => ({
+      uid: u.uid,
+      name: u.name || (u.uid === me.uid ? "나" : "상대방"),
+      color: idx === 0 ? "#E1889E" : "#8FB8D6"
+    }));
+    const cnt = uid => items.filter(i => i.doneBy && i.doneBy[uid]).length;
+    return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+      className: "row",
       style: {
-        boxShadow: "none",
-        border: "1.5px solid var(--line)"
+        justifyContent: "space-between"
       }
-    }, /*#__PURE__*/React.createElement("button", {
-      className: "box",
-      "aria-label": "\uB0B4 \uCCB4\uD06C",
-      onClick: () => pref().collection("items").doc(it.id).update({
-        ["doneBy." + me.uid]: !mine
-      }),
-      style: {
-        background: mine ? "var(--pink-deep)" : "#fff"
-      }
-    }, mine ? "✓" : ""), partner && /*#__PURE__*/React.createElement("button", {
-      className: "box",
-      "aria-label": (partner.name || "상대방") + " 체크",
-      disabled: true,
-      style: {
-        borderColor: "#8FB8D6",
-        background: pDone ? "#8FB8D6" : "#fff",
-        cursor: "default"
-      }
-    }, pDone ? "✓" : ""), /*#__PURE__*/React.createElement("span", {
-      className: "txt grow"
-    }, it.text), /*#__PURE__*/React.createElement("button", {
+    }, /*#__PURE__*/React.createElement("b", null, "\uC900\uBE44\uBB3C \uD83C\uDF92"), /*#__PURE__*/React.createElement("span", {
+      className: "sub"
+    }, cols.map(cl => cl.name + " " + cnt(cl.uid) + "/" + items.length).join(" · "))), cols.length > 1 && /*#__PURE__*/React.createElement("div", {
       className: "sub",
       style: {
-        fontSize: 11
-      },
-      onClick: () => {
-        if (confirm("삭제할까요?")) pref().collection("items").doc(it.id).delete();
+        marginTop: 4,
+        fontSize: 12
       }
-    }, "\uC0AD\uC81C"));
-  }), items.length === 0 && /*#__PURE__*/React.createElement("p", {
-    className: "sub",
-    style: {
-      margin: "12px 0 4px"
-    }
-  }, "\uCC59\uAE38 \uAC83\uB4E4\uC744 \uC801\uACE0, \uAC01\uC790 \uCC59\uAE30\uBA74 \uCCB4\uD06C\uD574\uC694!")), /*#__PURE__*/React.createElement("div", {
+    }, cols.map((cl, i) => /*#__PURE__*/React.createElement("span", {
+      key: cl.uid
+    }, i > 0 && " · ", /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: cl.color
+      }
+    }, "\u25A0"), " ", i === 0 ? "왼쪽은 " : "오른쪽은 ", cl.name, " \uCCB4\uD06C", cl.uid === me.uid ? " (나)" : ""))), /*#__PURE__*/React.createElement("div", {
+      className: "row",
+      style: {
+        marginTop: 10
+      }
+    }, /*#__PURE__*/React.createElement("input", {
+      placeholder: "\uC608: \uBCF4\uC870\uBC30\uD130\uB9AC, \uC0C1\uBE44\uC57D",
+      value: itemText,
+      onChange: e => setItemText(e.target.value),
+      onKeyDown: e => e.key === "Enter" && addItem()
+    }), /*#__PURE__*/React.createElement("button", {
+      className: "btn btn-primary",
+      style: {
+        width: "auto",
+        whiteSpace: "nowrap"
+      },
+      onClick: addItem
+    }, "\uCD94\uAC00")), items.map(it => {
+      const all = cols.length > 0 && cols.every(cl => it.doneBy && it.doneBy[cl.uid]);
+      return /*#__PURE__*/React.createElement("div", {
+        key: it.id,
+        className: "bk" + (all ? " done" : ""),
+        style: {
+          boxShadow: "none",
+          border: "1.5px solid var(--line)"
+        }
+      }, cols.map(cl => {
+        const done = !!(it.doneBy && it.doneBy[cl.uid]);
+        const mine = cl.uid === me.uid;
+        return /*#__PURE__*/React.createElement("button", {
+          key: cl.uid,
+          className: "box",
+          disabled: !mine,
+          "aria-label": cl.name + " 체크",
+          onClick: mine ? () => pref().collection("items").doc(it.id).update({
+            ["doneBy." + cl.uid]: !done
+          }) : undefined,
+          style: {
+            borderColor: cl.color,
+            background: done ? cl.color : "#fff",
+            cursor: mine ? "pointer" : "default"
+          }
+        }, done ? "✓" : "");
+      }), /*#__PURE__*/React.createElement("span", {
+        className: "txt grow"
+      }, it.text), /*#__PURE__*/React.createElement("button", {
+        className: "sub",
+        style: {
+          fontSize: 11
+        },
+        onClick: () => {
+          if (confirm("삭제할까요?")) pref().collection("items").doc(it.id).delete();
+        }
+      }, "\uC0AD\uC81C"));
+    }), items.length === 0 && /*#__PURE__*/React.createElement("p", {
+      className: "sub",
+      style: {
+        margin: "12px 0 4px"
+      }
+    }, "\uCC59\uAE38 \uAC83\uB4E4\uC744 \uC801\uACE0, \uAC01\uC790 \uC790\uAE30 \uC774\uB984 \uCCB4\uD06C\uBC15\uC2A4\uC5D0 \uCCB4\uD06C\uD574\uC694!"));
+  })()), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       marginTop: 12
