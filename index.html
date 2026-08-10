@@ -171,12 +171,24 @@ const firebaseConfig = {
 };
 /* ================================================= */
 
+/* ===== 네이버 지도 (선택) =====
+   네이버 클라우드 플랫폼(console.ncloud.com)에서 Application 등록 후
+   Client ID를 아래에 붙여넣으면 지도가 네이버 지도로 바뀌어요.
+   비워두면 오픈스트리트맵이 대신 사용돼요. */
+const NAVER_MAP_KEY = "00ccm7jbks";
+/* ============================== */
+
 const CONFIG_OK = !firebaseConfig.apiKey.includes("PASTE");
 let db = null,
   auth = null;
 if (CONFIG_OK) {
   firebase.initializeApp(firebaseConfig);
   db = firebase.firestore();
+  try {
+    db.enablePersistence({
+      synchronizeTabs: true
+    }).catch(() => {});
+  } catch (e) {}
   auth = firebase.auth();
 }
 const {
@@ -428,6 +440,21 @@ const relTime = t => {
     day: "numeric"
   });
 };
+let _naverP = null;
+function loadNaverMaps() {
+  if (window.naver && window.naver.maps) return Promise.resolve();
+  if (_naverP) return _naverP;
+  _naverP = new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = "https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=" + NAVER_MAP_KEY + "&submodules=geocoder";
+    s.onload = () => {
+      window.naver && window.naver.maps ? res() : rej(new Error("naver maps init failed"));
+    };
+    s.onerror = () => rej(new Error("naver maps load failed"));
+    document.head.appendChild(s);
+  });
+  return _naverP;
+}
 let _leafletP = null;
 function loadLeaflet() {
   if (window.L) return Promise.resolve();
@@ -489,13 +516,6 @@ const THEMES = {
     soft: "#F5EEFA",
     deep: "#A585C9",
     rose: "#7B58A6"
-  },
-  orange: {
-    name: "오렌지",
-    pink: "#FFD9B5",
-    soft: "#FFF3E7",
-    deep: "#F09A4E",
-    rose: "#C2732A"
   },
   white: {
     name: "화이트",
@@ -1171,7 +1191,11 @@ function Profiles({
     setEditing(true);
   };
   const save = async () => {
-    await db.collection("couples").doc(cid).collection("profiles").doc(me.uid).set(form, {
+    const clean = {
+      ...form,
+      extra: (form.extra || []).filter(ex => (ex.k || "").trim() || (ex.v || "").trim())
+    };
+    await db.collection("couples").doc(cid).collection("profiles").doc(me.uid).set(clean, {
       merge: true
     });
     setEditing(false);
@@ -1216,9 +1240,9 @@ function Profiles({
       style: {
         padding: "7px 12px",
         fontSize: 13,
-        background: "#fff",
-        border: "1.5px solid var(--line)",
-        color: "var(--rose)"
+        background: "transparent",
+        color: "#fff",
+        textShadow: "0 1px 3px rgba(0,0,0,.2)"
       },
       onClick: openEdit
     }, "\uC218\uC815"), /*#__PURE__*/React.createElement("button", {
@@ -1239,25 +1263,15 @@ function Profiles({
         gap: 8,
         textAlign: "center"
       }
-    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    }, [["생년월일", p.birth], ["MBTI", p.mbti], ["혈액형", p.blood]].concat((p.extra || []).map(ex => [ex.k || "항목", ex.v])).map(([l, v], ii) => /*#__PURE__*/React.createElement("div", {
+      key: ii
+    }, /*#__PURE__*/React.createElement("div", {
       className: "sub"
-    }, "\uC0DD\uB144\uC6D4\uC77C"), /*#__PURE__*/React.createElement("b", {
+    }, l), /*#__PURE__*/React.createElement("b", {
       style: {
         fontSize: 13
       }
-    }, p.birth || "-")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-      className: "sub"
-    }, "MBTI"), /*#__PURE__*/React.createElement("b", {
-      style: {
-        fontSize: 13
-      }
-    }, p.mbti || "-")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-      className: "sub"
-    }, "\uD608\uC561\uD615"), /*#__PURE__*/React.createElement("b", {
-      style: {
-        fontSize: 13
-      }
-    }, p.blood || "-"))));
+    }, v || "-")))));
   }), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
@@ -1275,7 +1289,7 @@ function Profiles({
       color: "var(--rose)",
       margin: "2px 0"
     }
-  }, "\uC0AC\uADC4 \uC9C0 +", annivDays(couple.anniv), "\uC77C \uD83D\uDC97"), /*#__PURE__*/React.createElement("button", {
+  }, "\uC0AC\uADC4 \uC9C0 +", annivDays(couple.anniv), "\uC77C \uD83E\uDE77"), /*#__PURE__*/React.createElement("button", {
     className: "sub",
     onClick: () => {
       setAnnivVal(couple.anniv);
@@ -1429,7 +1443,84 @@ function Profiles({
       ...form,
       [f.k]: e.target.value
     })
-  }))), /*#__PURE__*/React.createElement("button", {
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "row",
+    style: {
+      marginTop: 16
+    }
+  }, /*#__PURE__*/React.createElement("b", {
+    style: {
+      fontSize: 14
+    }
+  }, "\uB098\uB9CC\uC758 \uD56D\uBAA9"), /*#__PURE__*/React.createElement("span", {
+    className: "grow"
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-ghost",
+    style: {
+      padding: "6px 11px",
+      fontSize: 12
+    },
+    onClick: () => setForm({
+      ...form,
+      extra: [...(form.extra || []), {
+        k: "",
+        v: ""
+      }]
+    })
+  }, "+ \uD56D\uBAA9 \uCD94\uAC00")), /*#__PURE__*/React.createElement("div", {
+    className: "sub",
+    style: {
+      fontSize: 12,
+      marginTop: 2
+    }
+  }, "\uC608: \uCDE8\uBBF8 / \uC88B\uC544\uD558\uB294 \uC74C\uC2DD / \uC18C\uC6B8\uD478\uB4DC / \uCD5C\uC560 \uACC4\uC808\u2026"), (form.extra || []).map((ex, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    className: "row",
+    style: {
+      marginTop: 8
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    placeholder: "\uD56D\uBAA9\uBA85",
+    value: ex.k,
+    style: {
+      flex: "0 0 36%"
+    },
+    onChange: e => {
+      const a = [...form.extra];
+      a[i] = {
+        ...a[i],
+        k: e.target.value
+      };
+      setForm({
+        ...form,
+        extra: a
+      });
+    }
+  }), /*#__PURE__*/React.createElement("input", {
+    placeholder: "\uB0B4\uC6A9",
+    value: ex.v,
+    onChange: e => {
+      const a = [...form.extra];
+      a[i] = {
+        ...a[i],
+        v: e.target.value
+      };
+      setForm({
+        ...form,
+        extra: a
+      });
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "icon-btn",
+    style: {
+      width: 28,
+      height: 28
+    },
+    onClick: () => setForm({
+      ...form,
+      extra: form.extra.filter((_, j) => j !== i)
+    })
+  }, I.x))), /*#__PURE__*/React.createElement("button", {
     className: "btn btn-primary",
     style: {
       marginTop: 16
@@ -2082,25 +2173,16 @@ function CalendarView({
   cid,
   me,
   diaries,
+  events,
   onWrite,
   onOpen
 }) {
   const now = new Date();
   const [ym, setYm] = useState([now.getFullYear(), now.getMonth()]);
   const [sel, setSel] = useState(todayStr());
-  const [events, setEvents] = useState([]);
   const [evForm, setEvForm] = useState(null); // {date,title,memo}
   const [evDetail, setEvDetail] = useState(null);
   const [y, m] = ym;
-  useEffect(() => db.collection("couples").doc(cid).collection("events").onSnapshot(s => {
-    const a = [];
-    s.forEach(d => a.push({
-      id: d.id,
-      ...d.data()
-    }));
-    a.sort((x, y) => x.date < y.date ? -1 : 1);
-    setEvents(a);
-  }), [cid]);
   useEffect(() => {
     if (evDetail) {
       const e = events.find(x => x.id === evDetail.id);
@@ -3316,7 +3398,9 @@ function DiaryDetail({
 /* ---------- Bucket list (check + drag reorder) ---------- */
 function BucketView({
   cid,
-  me
+  me,
+  diaries,
+  onOpenDiary
 }) {
   const [items, setItems] = useState([]);
   const [text, setText] = useState("");
@@ -3349,11 +3433,13 @@ function BucketView({
   const toggle = it => {
     if (it.done) bref(it.id).update({
       done: false,
-      doneDate: ""
+      doneDate: "",
+      diaryId: ""
     });else setDateSheet({
       id: it.id,
       date: todayStr(),
-      editing: false
+      editing: false,
+      diaryId: ""
     });
   };
   const del = it => {
@@ -3465,7 +3551,8 @@ function BucketView({
     onClick: it.done ? () => setDateSheet({
       id: it.id,
       date: it.doneDate || todayStr(),
-      editing: true
+      editing: true,
+      diaryId: it.diaryId || ""
     }) : undefined
   }, it.text, it.done && it.doneDate && /*#__PURE__*/React.createElement("span", {
     className: "sub",
@@ -3474,7 +3561,24 @@ function BucketView({
       fontSize: 11,
       textDecoration: "none"
     }
-  }, "\uD83C\uDF89 ", fmtK(it.doneDate), " \uB2EC\uC131")), /*#__PURE__*/React.createElement("button", {
+  }, "\uD83C\uDF89 ", fmtK(it.doneDate), " \uB2EC\uC131"), it.done && it.diaryId && (() => {
+    const d = (diaries || []).find(x => x.id === it.diaryId);
+    return d ? /*#__PURE__*/React.createElement("button", {
+      className: "sub",
+      style: {
+        display: "block",
+        fontSize: 11,
+        textAlign: "left",
+        padding: 0,
+        color: "var(--rose)",
+        textDecoration: "none"
+      },
+      onClick: e => {
+        e.stopPropagation();
+        onOpenDiary && onOpenDiary(it.diaryId);
+      }
+    }, "\uD83D\uDCD6 \"", d.title || "일기", "\" \uBCF4\uB7EC \uAC00\uAE30") : null;
+  })()), /*#__PURE__*/React.createElement("button", {
     className: "sub",
     style: {
       fontSize: 11
@@ -3525,6 +3629,37 @@ function BucketView({
       date: e.target.value
     })
   }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "sub",
+    style: {
+      marginBottom: 4
+    }
+  }, "\uD568\uAED8 \uC4F4 \uC77C\uAE30 \uC5F0\uACB0 (\uC120\uD0DD)"), /*#__PURE__*/React.createElement("select", {
+    value: dateSheet.diaryId || "",
+    onChange: e => {
+      const id = e.target.value;
+      const d = (diaries || []).find(x => x.id === id);
+      setDateSheet({
+        ...dateSheet,
+        diaryId: id,
+        date: d ? d.date : dateSheet.date
+      });
+    }
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "\uC5F0\uACB0 \uC548 \uD568"), (diaries || []).map(d => /*#__PURE__*/React.createElement("option", {
+    key: d.id,
+    value: d.id
+  }, fmtK(d.date), " \xB7 ", d.title || "제목 없음"))), /*#__PURE__*/React.createElement("div", {
+    className: "sub",
+    style: {
+      marginTop: 4,
+      fontSize: 11
+    }
+  }, "\uC77C\uAE30\uB97C \uACE0\uB974\uBA74 \uB2EC\uC131 \uB0A0\uC9DC\uAC00 \uC77C\uAE30 \uB0A0\uC9DC\uB85C \uC790\uB3D9\uC73C\uB85C \uB9DE\uCDB0\uC838\uC694.")), /*#__PURE__*/React.createElement("div", {
     className: "row",
     style: {
       marginTop: 14,
@@ -3535,7 +3670,8 @@ function BucketView({
     onClick: () => {
       bref(dateSheet.id).update({
         done: true,
-        doneDate: ""
+        doneDate: "",
+        diaryId: dateSheet.diaryId || ""
       });
       setDateSheet(null);
     }
@@ -3548,7 +3684,8 @@ function BucketView({
       }
       bref(dateSheet.id).update({
         done: true,
-        doneDate: dateSheet.date
+        doneDate: dateSheet.date,
+        diaryId: dateSheet.diaryId || ""
       });
       setDateSheet(null);
     }
@@ -3572,7 +3709,7 @@ const fmtMD2 = s => {
   const p = s.split("-");
   return +p[1] + "/" + +p[2];
 };
-function PlanMap({
+function OsmPlanMap({
   stops
 }) {
   const el = useRef();
@@ -3640,7 +3777,7 @@ function PlanMap({
     }
   });
 }
-function MapPicker({
+function OsmMapPicker({
   initial,
   onPick,
   onClose
@@ -3789,6 +3926,286 @@ function MapPicker({
       onClose();
     }
   }, sel ? "이 위치로 지정하기" : "지도를 눌러 위치를 골라주세요")));
+}
+function NaverPlanMap({
+  stops
+}) {
+  const el = useRef();
+  const mapRef = useRef();
+  const objsRef = useRef([]);
+  const [err, setErr] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    loadNaverMaps().then(() => {
+      if (!alive || !el.current) return;
+      const nm = window.naver.maps;
+      if (!mapRef.current) {
+        mapRef.current = new nm.Map(el.current, {
+          center: new nm.LatLng(36.5, 127.8),
+          zoom: 7,
+          scrollWheel: false
+        });
+      }
+      objsRef.current.forEach(o => o.setMap(null));
+      objsRef.current = [];
+      const pts = stops.filter(s => s.lat && s.lng);
+      pts.forEach((s, i) => {
+        objsRef.current.push(new nm.Marker({
+          position: new nm.LatLng(s.lat, s.lng),
+          map: mapRef.current,
+          icon: {
+            content: '<div class="mkr">' + (i + 1) + '</div>',
+            anchor: new nm.Point(13, 13)
+          }
+        }));
+      });
+      if (pts.length > 1) {
+        objsRef.current.push(new nm.Polyline({
+          path: pts.map(s => new nm.LatLng(s.lat, s.lng)),
+          strokeColor: "#E1889E",
+          strokeWeight: 3,
+          strokeStyle: "shortdash",
+          map: mapRef.current
+        }));
+        const b = new nm.LatLngBounds();
+        pts.forEach(s => b.extend(new nm.LatLng(s.lat, s.lng)));
+        mapRef.current.fitBounds(b);
+      } else if (pts.length === 1) {
+        mapRef.current.setCenter(new nm.LatLng(pts[0].lat, pts[0].lng));
+        mapRef.current.setZoom(14);
+      }
+    }).catch(() => {
+      if (alive) setErr(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [stops]);
+  useEffect(() => () => {
+    if (mapRef.current) {
+      try {
+        mapRef.current.destroy();
+      } catch (e) {}
+      mapRef.current = null;
+    }
+  }, []);
+  if (err) return /*#__PURE__*/React.createElement(OsmPlanMap, {
+    stops: stops
+  });
+  return /*#__PURE__*/React.createElement("div", {
+    ref: el,
+    style: {
+      height: 230,
+      borderRadius: 16,
+      overflow: "hidden",
+      marginTop: 10,
+      position: "relative",
+      zIndex: 0,
+      background: "var(--line)"
+    }
+  });
+}
+function NaverMapPicker({
+  initial,
+  onPick,
+  onClose
+}) {
+  const mapEl = useRef();
+  const mapRef = useRef();
+  const markRef = useRef();
+  const [q, setQ] = useState("");
+  const [res, setRes] = useState([]);
+  const [sel, setSel] = useState(initial || null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(false);
+  const place = (lat, lng) => {
+    setSel({
+      lat,
+      lng
+    });
+    if (!mapRef.current) return;
+    const nm = window.naver.maps;
+    if (markRef.current) markRef.current.setPosition(new nm.LatLng(lat, lng));else markRef.current = new nm.Marker({
+      position: new nm.LatLng(lat, lng),
+      map: mapRef.current,
+      icon: {
+        content: '<div class="mkr">📍</div>',
+        anchor: new nm.Point(13, 13)
+      }
+    });
+  };
+  useEffect(() => {
+    let alive = true;
+    loadNaverMaps().then(() => {
+      if (!alive || mapRef.current || !mapEl.current) return;
+      const nm = window.naver.maps;
+      const m = new nm.Map(mapEl.current, {
+        center: initial ? new nm.LatLng(initial.lat, initial.lng) : new nm.LatLng(36.5, 127.8),
+        zoom: initial ? 15 : 7
+      });
+      nm.Event.addListener(m, "click", e => place(e.coord.lat(), e.coord.lng()));
+      mapRef.current = m;
+      if (initial) place(initial.lat, initial.lng);
+    }).catch(() => {
+      if (alive) setErr(true);
+    });
+    return () => {
+      alive = false;
+      if (mapRef.current) {
+        try {
+          mapRef.current.destroy();
+        } catch (e) {}
+        mapRef.current = null;
+      }
+    };
+  }, []);
+  const search = async () => {
+    if (!q.trim()) return;
+    setBusy(true);
+    const query = q.trim();
+    const done = list => {
+      setRes(list);
+      setBusy(false);
+    };
+    try {
+      const nm = window.naver && window.naver.maps;
+      if (nm && nm.Service) {
+        nm.Service.geocode({
+          query
+        }, (status, resp) => {
+          const addrs = status === nm.Service.Status.OK && resp.v2 && resp.v2.addresses || [];
+          if (addrs.length > 0) {
+            done(addrs.map(a => ({
+              name: a.roadAddress || a.jibunAddress || query,
+              lat: +a.y,
+              lng: +a.x
+            })));
+          } else {
+            // 주소 검색에 없으면 오픈 검색으로 한 번 더
+            fetch("https://nominatim.openstreetmap.org/search?format=json&accept-language=ko&limit=6&q=" + encodeURIComponent(query)).then(r => r.json()).then(j => done(j.map(r => ({
+              name: r.display_name,
+              lat: +r.lat,
+              lng: +r.lon
+            })))).catch(() => done([]));
+          }
+        });
+        return;
+      }
+    } catch (e) {}
+    try {
+      const r = await fetch("https://nominatim.openstreetmap.org/search?format=json&accept-language=ko&limit=6&q=" + encodeURIComponent(query));
+      const j = await r.json();
+      done(j.map(x => ({
+        name: x.display_name,
+        lat: +x.lat,
+        lng: +x.lon
+      })));
+    } catch (e) {
+      done([]);
+    }
+  };
+  if (err) return /*#__PURE__*/React.createElement(OsmMapPicker, {
+    initial: initial,
+    onPick: onPick,
+    onClose: onClose
+  });
+  return /*#__PURE__*/React.createElement("div", {
+    className: "overlay",
+    onClick: e => e.target === e.currentTarget && onClose()
+  }, /*#__PURE__*/React.createElement(BackTrap, {
+    onClose: onClose
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "sheet"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "row",
+    style: {
+      justifyContent: "space-between"
+    }
+  }, /*#__PURE__*/React.createElement("b", {
+    style: {
+      fontSize: 18
+    }
+  }, "\uC704\uCE58 \uC9C0\uC815 \uD83D\uDDFA\uFE0F"), /*#__PURE__*/React.createElement("button", {
+    className: "icon-btn",
+    onClick: onClose
+  }, I.x)), /*#__PURE__*/React.createElement("div", {
+    className: "row",
+    style: {
+      marginTop: 10
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    placeholder: "\uC8FC\uC18C\xB7\uC7A5\uC18C \uAC80\uC0C9 (\uC608: \uB300\uC804 \uC911\uAD6C \uB300\uC885\uB85C 480)",
+    value: q,
+    onChange: e => setQ(e.target.value),
+    onKeyDown: e => e.key === "Enter" && search()
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-primary",
+    style: {
+      width: "auto",
+      whiteSpace: "nowrap"
+    },
+    disabled: busy,
+    onClick: search
+  }, busy ? "…" : "검색")), res.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 8
+    }
+  }, res.map((r, i) => /*#__PURE__*/React.createElement("button", {
+    key: i,
+    className: "row",
+    style: {
+      width: "100%",
+      textAlign: "left",
+      background: "#fff",
+      borderRadius: 12,
+      padding: "9px 12px",
+      marginTop: 6,
+      boxShadow: "var(--shadow)"
+    },
+    onClick: () => {
+      place(r.lat, r.lng);
+      mapRef.current && mapRef.current.setCenter(new window.naver.maps.LatLng(r.lat, r.lng));
+      mapRef.current && mapRef.current.setZoom(15);
+      setRes([]);
+    }
+  }, /*#__PURE__*/React.createElement("span", null, "\uD83D\uDCCD"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 13
+    },
+    className: "grow"
+  }, r.name)))), /*#__PURE__*/React.createElement("div", {
+    className: "sub",
+    style: {
+      marginTop: 8
+    }
+  }, "\uAC00\uAC8C \uC774\uB984\uC740 \uAC80\uC0C9\uC774 \uC548 \uB420 \uC218 \uC788\uC5B4\uC694 \u2014 \uC8FC\uC18C\uB85C \uAC80\uC0C9\uD558\uAC70\uB098 \uC9C0\uB3C4\uB97C \uC9C1\uC811 \uB20C\uB7EC \uD540\uC744 \uCC0D\uC5B4\uC8FC\uC138\uC694!"), /*#__PURE__*/React.createElement("div", {
+    ref: mapEl,
+    style: {
+      height: 280,
+      borderRadius: 16,
+      overflow: "hidden",
+      marginTop: 8,
+      position: "relative",
+      zIndex: 0,
+      background: "var(--line)"
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-primary",
+    style: {
+      marginTop: 14
+    },
+    disabled: !sel,
+    onClick: () => {
+      onPick(sel);
+      onClose();
+    }
+  }, sel ? "이 위치로 지정하기" : "지도를 눌러 위치를 골라주세요")));
+}
+function PlanMap(props) {
+  return NAVER_MAP_KEY ? /*#__PURE__*/React.createElement(NaverPlanMap, props) : /*#__PURE__*/React.createElement(OsmPlanMap, props);
+}
+function MapPicker(props) {
+  return NAVER_MAP_KEY ? /*#__PURE__*/React.createElement(NaverMapPicker, props) : /*#__PURE__*/React.createElement(OsmMapPicker, props);
 }
 function PlanForm({
   cid,
@@ -5083,7 +5500,7 @@ function PlanView({
       style: {
         cursor: "pointer",
         background: pc.bg,
-        ...ivoryBorder(pc)
+        border: "1.5px solid " + pc.line
       },
       onClick: () => setOpenId(p.id)
     }, /*#__PURE__*/React.createElement("span", {
@@ -5393,7 +5810,7 @@ function AccountView({
       style: {
         marginTop: 6
       }
-    }, "\uC0AC\uC9C4\uC740 \uC790\uB3D9 \uC555\uCD95\uB418\uC5B4 \uC800\uC7A5\uB3FC\uC694. 80%\uAC00 \uB118\uC5B4\uAC00\uBA74 \uC54C\uB824\uC8FC\uC138\uC694 \u2014 \uC0AC\uC9C4 \uC800\uC7A5 \uBC29\uC2DD\uC744 \uBB34\uB8CC \uC678\uBD80 \uC800\uC7A5\uC18C\uB85C \uB113\uD600\uB4DC\uB9B4 \uC218 \uC788\uC5B4\uC694."));
+    }, "\uC0AC\uC9C4\uC740 \uC790\uB3D9 \uC555\uCD95\uB418\uC5B4 \uC800\uC7A5\uB3FC\uC694. 80%\uAC00 \uB118\uC5B4\uAC00\uBA74 \uC0AC\uC9C4 \uC800\uC7A5 \uBC29\uC2DD\uC744 \uBB34\uB8CC \uC678\uBD80 \uC800\uC7A5\uC18C\uB85C \uB113\uD600\uB4DC\uB9B4 \uC218 \uC788\uC5B4\uC694."));
   })()), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
@@ -5439,7 +5856,7 @@ function AccountView({
     style: {
       marginTop: 8
     }
-  }, "\uD604\uC7AC: ", THEMES[userDoc.theme || "pink"].name)), isPwUser && /*#__PURE__*/React.createElement("div", {
+  }, "\uD604\uC7AC: ", (THEMES[userDoc.theme] || THEMES.pink).name)), isPwUser && /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       marginTop: 12
@@ -5628,6 +6045,21 @@ function Shell({
     });
   }, [userDoc && userDoc.coupleId]);
 
+  // 일정도 앱 시작 시 미리 구독해 캘린더 진입 즉시 표시
+  const [events, setEvents] = useState([]);
+  useEffect(() => {
+    if (!userDoc) return;
+    return db.collection("couples").doc(userDoc.coupleId).collection("events").onSnapshot(s => {
+      const a = [];
+      s.forEach(d => a.push({
+        id: d.id,
+        ...d.data()
+      }));
+      a.sort((x, y) => x.date < y.date ? -1 : 1);
+      setEvents(a);
+    });
+  }, [userDoc && userDoc.coupleId]);
+
   // 일기 탭을 보면 "확인함"으로 기록 → 새 글/댓글 배지 계산에 사용
   useEffect(() => {
     if (tab === "diary" && userDoc) {
@@ -5762,6 +6194,7 @@ function Shell({
     cid: cid,
     me: me,
     diaries: diaries,
+    events: events,
     onWrite: d => {
       setEditorDate(d);
       setTab("diary");
@@ -5785,7 +6218,12 @@ function Shell({
     users: usersM
   }), tab === "bucket" && /*#__PURE__*/React.createElement(BucketView, {
     cid: cid,
-    me: me
+    me: me,
+    diaries: diaries,
+    onOpenDiary: id => {
+      setOpenId(id);
+      setTab("diary");
+    }
   }), tab === "account" && /*#__PURE__*/React.createElement(AccountView, {
     me: me,
     userDoc: userDoc,

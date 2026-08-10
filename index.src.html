@@ -172,11 +172,19 @@ const firebaseConfig = {
 };
 /* ================================================= */
 
+/* ===== 네이버 지도 (선택) =====
+   네이버 클라우드 플랫폼(console.ncloud.com)에서 Application 등록 후
+   Client ID를 아래에 붙여넣으면 지도가 네이버 지도로 바뀌어요.
+   비워두면 오픈스트리트맵이 대신 사용돼요. */
+const NAVER_MAP_KEY = "00ccm7jbks";
+/* ============================== */
+
 const CONFIG_OK = !firebaseConfig.apiKey.includes("PASTE");
 let db=null, auth=null;
 if (CONFIG_OK){
   firebase.initializeApp(firebaseConfig);
   db = firebase.firestore();
+  try{ db.enablePersistence({synchronizeTabs:true}).catch(()=>{}); }catch(e){}
   auth = firebase.auth();
 }
 const {useState,useEffect,useRef,useMemo} = React;
@@ -330,6 +338,19 @@ const relTime = (t)=>{ const s=Math.floor((Date.now()-t)/1000);
   if(s<60) return "방금 전"; const m=Math.floor(s/60); if(m<60) return m+"분 전";
   const h=Math.floor(m/60); if(h<24) return h+"시간 전"; const d=Math.floor(h/24); if(d<7) return d+"일 전";
   return new Date(t).toLocaleDateString("ko-KR",{month:"numeric",day:"numeric"}); };
+let _naverP = null;
+function loadNaverMaps(){
+  if(window.naver && window.naver.maps) return Promise.resolve();
+  if(_naverP) return _naverP;
+  _naverP = new Promise((res,rej)=>{
+    const s = document.createElement("script");
+    s.src = "https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId="+NAVER_MAP_KEY+"&submodules=geocoder";
+    s.onload = ()=>{ (window.naver&&window.naver.maps)? res() : rej(new Error("naver maps init failed")); };
+    s.onerror = ()=>rej(new Error("naver maps load failed"));
+    document.head.appendChild(s);
+  });
+  return _naverP;
+}
 let _leafletP = null;
 function loadLeaflet(){
   if(window.L) return Promise.resolve();
@@ -354,7 +375,6 @@ const THEMES = {
   mint:  {name:"민트 그린",   pink:"#C7EDE6", soft:"#EAF7F4", deep:"#5FBFAE", rose:"#38907F"},
   blue:  {name:"베이비 블루", pink:"#CDE7F0", soft:"#EAF5F9", deep:"#7FB5D6", rose:"#49809E"},
   lav:   {name:"라벤더",      pink:"#E6D6F2", soft:"#F5EEFA", deep:"#A585C9", rose:"#7B58A6"},
-  orange:{name:"오렌지",      pink:"#FFD9B5", soft:"#FFF3E7", deep:"#F09A4E", rose:"#C2732A"},
   white: {name:"화이트",      pink:"#EDE7DF", soft:"#F6F2EC", deep:"#A99C8D", rose:"#857767"}
 };
 function applyTheme(t){
@@ -556,7 +576,8 @@ function Profiles({cid, me, users, couple}){
   const members = users; // [{uid,name,photo}...] me first
   const openEdit = ()=>{ setForm(profiles[me.uid]||{}); setEditing(true); };
   const save = async ()=>{
-    await db.collection("couples").doc(cid).collection("profiles").doc(me.uid).set(form,{merge:true});
+    const clean = {...form, extra:(form.extra||[]).filter(ex=>(ex.k||"").trim() || (ex.v||"").trim())};
+    await db.collection("couples").doc(cid).collection("profiles").doc(me.uid).set(clean,{merge:true});
     setEditing(false);
   };
   return <div>
@@ -572,22 +593,22 @@ function Profiles({cid, me, users, couple}){
             <b style={{fontSize:16}}>{p.name || u.name || (mine?"나":"상대방")}</b>
             <div className="sub">{p.bio || "한 줄 소개가 아직 없어요"}</div>
           </div>
-          {mine && <button className="btn" style={{padding:"7px 12px",fontSize:13,background:"#fff",
-            border:"1.5px solid var(--line)",color:"var(--rose)"}} onClick={openEdit}>수정</button>}
+          {mine && <button className="btn" style={{padding:"7px 12px",fontSize:13,background:"transparent",
+            color:"#fff",textShadow:"0 1px 3px rgba(0,0,0,.2)"}} onClick={openEdit}>수정</button>}
           <button className="icon-btn" style={{width:28,height:28,fontSize:14}} onClick={()=>setColorFor(u.uid)} aria-label="카드 색상">🎨</button>
         </div>
         <div className="hr"/>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,textAlign:"center"}}>
-          <div><div className="sub">생년월일</div><b style={{fontSize:13}}>{p.birth||"-"}</b></div>
-          <div><div className="sub">MBTI</div><b style={{fontSize:13}}>{p.mbti||"-"}</b></div>
-          <div><div className="sub">혈액형</div><b style={{fontSize:13}}>{p.blood||"-"}</b></div>
+          {[["생년월일",p.birth],["MBTI",p.mbti],["혈액형",p.blood]]
+            .concat((p.extra||[]).map(ex=>[ex.k||"항목", ex.v]))
+            .map(([l,v],ii)=><div key={ii}><div className="sub">{l}</div><b style={{fontSize:13}}>{v||"-"}</b></div>)}
         </div>
       </div>;
     })}
     <div className="card" style={{marginTop:14,textAlign:"center",background:"var(--pink-soft)",boxShadow:"none"}}>
       {couple && couple.anniv ? <>
         <div className="sub">{fmtK(couple.anniv)}부터</div>
-        <div style={{fontSize:18,fontWeight:700,color:"var(--rose)",margin:"2px 0"}}>사귄 지 +{annivDays(couple.anniv)}일 💗</div>
+        <div style={{fontSize:18,fontWeight:700,color:"var(--rose)",margin:"2px 0"}}>사귄 지 +{annivDays(couple.anniv)}일 🩷</div>
         <button className="sub" onClick={()=>{setAnnivVal(couple.anniv); setAnnivOpen(true);}}>날짜 수정</button>
       </> : <button className="btn btn-ghost" onClick={()=>{setAnnivVal(todayStr()); setAnnivOpen(true);}}>💗 사귄 날 설정하기</button>}
     </div>
@@ -631,6 +652,20 @@ function Profiles({cid, me, users, couple}){
         {PF.map(f=><div key={f.k} style={{marginTop:10}}>
           <div className="sub" style={{marginBottom:4}}>{f.label}</div>
           <input type={f.type||"text"} placeholder={f.ph} value={form[f.k]||""} onChange={e=>setForm({...form,[f.k]:e.target.value})}/>
+        </div>)}
+        <div className="row" style={{marginTop:16}}>
+          <b style={{fontSize:14}}>나만의 항목</b><span className="grow"/>
+          <button className="btn btn-ghost" style={{padding:"6px 11px",fontSize:12}}
+            onClick={()=>setForm({...form, extra:[...(form.extra||[]), {k:"",v:""}]})}>+ 항목 추가</button>
+        </div>
+        <div className="sub" style={{fontSize:12,marginTop:2}}>예: 취미 / 좋아하는 음식 / 소울푸드 / 최애 계절…</div>
+        {(form.extra||[]).map((ex,i)=><div key={i} className="row" style={{marginTop:8}}>
+          <input placeholder="항목명" value={ex.k} style={{flex:"0 0 36%"}}
+            onChange={e=>{ const a=[...form.extra]; a[i]={...a[i],k:e.target.value}; setForm({...form,extra:a}); }}/>
+          <input placeholder="내용" value={ex.v}
+            onChange={e=>{ const a=[...form.extra]; a[i]={...a[i],v:e.target.value}; setForm({...form,extra:a}); }}/>
+          <button className="icon-btn" style={{width:28,height:28}}
+            onClick={()=>setForm({...form, extra:form.extra.filter((_,j)=>j!==i)})}>{I.x}</button>
         </div>)}
         <button className="btn btn-primary" style={{marginTop:16}} onClick={save}>저장하기</button>
       </div>
@@ -842,17 +877,13 @@ function Links({cid, me, cat, users}){
 }
 
 /* ---------- Calendar ---------- */
-function CalendarView({cid, me, diaries, onWrite, onOpen}){
+function CalendarView({cid, me, diaries, events, onWrite, onOpen}){
   const now = new Date();
   const [ym,setYm] = useState([now.getFullYear(), now.getMonth()]);
   const [sel,setSel] = useState(todayStr());
-  const [events,setEvents] = useState([]);
   const [evForm,setEvForm] = useState(null); // {date,title,memo}
   const [evDetail,setEvDetail] = useState(null);
   const [y,m] = ym;
-  useEffect(()=>db.collection("couples").doc(cid).collection("events")
-    .onSnapshot(s=>{ const a=[]; s.forEach(d=>a.push({id:d.id,...d.data()}));
-      a.sort((x,y)=>x.date<y.date?-1:1); setEvents(a); }),[cid]);
   useEffect(()=>{ if(evDetail){ const e=events.find(x=>x.id===evDetail.id); setEvDetail(e||null); } },[events]);
   const byDate = useMemo(()=>{ const o={}; diaries.forEach(d=>{ (o[d.date]=o[d.date]||[]).push(d); }); return o; },[diaries]);
   const evByDate = useMemo(()=>{
@@ -1258,7 +1289,7 @@ function DiaryDetail({cid, me, users, entry, close, edit}){
 }
 
 /* ---------- Bucket list (check + drag reorder) ---------- */
-function BucketView({cid, me}){
+function BucketView({cid, me, diaries, onOpenDiary}){
   const [items,setItems] = useState([]);
   const [text,setText] = useState("");
   const [drag,setDrag] = useState(null); // {idx, dy}
@@ -1275,8 +1306,8 @@ function BucketView({cid, me}){
   const [dateSheet,setDateSheet] = useState(null); // {id, date, editing}
   const bref = (id)=> db.collection("couples").doc(cid).collection("bucket").doc(id);
   const toggle = (it)=>{
-    if(it.done) bref(it.id).update({done:false, doneDate:""});
-    else setDateSheet({id:it.id, date:todayStr(), editing:false});
+    if(it.done) bref(it.id).update({done:false, doneDate:"", diaryId:""});
+    else setDateSheet({id:it.id, date:todayStr(), editing:false, diaryId:""});
   };
   const del = (it)=>{ if(confirm("삭제할까요?")) bref(it.id).delete(); };
 
@@ -1333,8 +1364,11 @@ function BucketView({cid, me}){
           style={drag&&drag.idx===idx?{transform:`translateY(${drag.dy}px)`}:{}}>
           <button className="box" onClick={()=>toggle(it)} aria-label="달성 체크">{it.done?"✓":""}</button>
           <span className="txt grow" style={it.done? {cursor:"pointer"} : {}}
-            onClick={it.done? ()=>setDateSheet({id:it.id, date: it.doneDate||todayStr(), editing:true}) : undefined}>{it.text}
+            onClick={it.done? ()=>setDateSheet({id:it.id, date: it.doneDate||todayStr(), editing:true, diaryId: it.diaryId||""}) : undefined}>{it.text}
             {it.done && it.doneDate && <span className="sub" style={{display:"block",fontSize:11,textDecoration:"none"}}>🎉 {fmtK(it.doneDate)} 달성</span>}
+            {it.done && it.diaryId && (()=>{ const d=(diaries||[]).find(x=>x.id===it.diaryId);
+              return d? <button className="sub" style={{display:"block",fontSize:11,textAlign:"left",padding:0,color:"var(--rose)",textDecoration:"none"}}
+                onClick={e=>{ e.stopPropagation(); onOpenDiary && onOpenDiary(it.diaryId); }}>📖 "{d.title||"일기"}" 보러 가기</button> : null; })()}
           </span>
           <button className="sub" style={{fontSize:11}} onClick={()=>del(it)}>삭제</button>
           <span className="handle" onPointerDown={e=>onHandleDown(e,idx)} aria-label="순서 바꾸기">⠿</span>
@@ -1350,13 +1384,24 @@ function BucketView({cid, me}){
         <p className="sub" style={{margin:"6px 0 0"}}>언제 이뤘는지 기록해 둘까요? 날짜를 몰라도 괜찮아요.</p>
         <input type="date" value={dateSheet.date} style={{marginTop:12}}
           onChange={e=>setDateSheet({...dateSheet, date:e.target.value})}/>
+        <div style={{marginTop:10}}><div className="sub" style={{marginBottom:4}}>함께 쓴 일기 연결 (선택)</div>
+          <select value={dateSheet.diaryId||""} onChange={e=>{
+              const id = e.target.value;
+              const d = (diaries||[]).find(x=>x.id===id);
+              setDateSheet({...dateSheet, diaryId:id, date: d? d.date : dateSheet.date});
+            }}>
+            <option value="">연결 안 함</option>
+            {(diaries||[]).map(d=><option key={d.id} value={d.id}>{fmtK(d.date)} · {d.title||"제목 없음"}</option>)}
+          </select>
+          <div className="sub" style={{marginTop:4,fontSize:11}}>일기를 고르면 달성 날짜가 일기 날짜로 자동으로 맞춰져요.</div>
+        </div>
         <div className="row" style={{marginTop:14,gap:8}}>
           <button className="btn btn-line grow"
-            onClick={()=>{ bref(dateSheet.id).update({done:true, doneDate:""}); setDateSheet(null); }}>
+            onClick={()=>{ bref(dateSheet.id).update({done:true, doneDate:"", diaryId:dateSheet.diaryId||""}); setDateSheet(null); }}>
             {dateSheet.editing? "날짜 지우기" : "날짜 없이 체크"}</button>
           <button className="btn btn-primary grow"
             onClick={()=>{ if(!dateSheet.date){ alert("날짜를 골라주세요!"); return; }
-              bref(dateSheet.id).update({done:true, doneDate:dateSheet.date}); setDateSheet(null); }}>
+              bref(dateSheet.id).update({done:true, doneDate:dateSheet.date, diaryId:dateSheet.diaryId||""}); setDateSheet(null); }}>
             {dateSheet.editing? "저장하기" : "이 날짜로 체크"}</button>
         </div>
       </div>
@@ -1369,7 +1414,7 @@ const PLAN_TYPES = { travel:{label:"여행", emoji:"✈️"}, etc:{label:"기타
 const PLAN_EMOJIS = ["✈️","🚄","🚗","🚌","🛳️","🏝️","🏔️","🏕️","🎡","🗼","🌸","🌊","🧳","🎒","🏠","📁","📌","💪","📚","🎬","🎨","💰","🍽️","💗"];
 const fmtMD2 = (s)=>{ if(!s) return ""; const p=s.split("-"); return (+p[1])+"/"+(+p[2]); };
 
-function PlanMap({stops}){
+function OsmPlanMap({stops}){
   const el = useRef(); const mapRef = useRef(); const layerRef = useRef();
   useEffect(()=>{
     let alive = true;
@@ -1396,7 +1441,7 @@ function PlanMap({stops}){
   return <div ref={el} style={{height:230,borderRadius:16,overflow:"hidden",marginTop:10,position:"relative",zIndex:0,background:"var(--line)"}}/>;
 }
 
-function MapPicker({initial, onPick, onClose}){
+function OsmMapPicker({initial, onPick, onClose}){
   const mapEl = useRef(); const mapRef = useRef(); const markRef = useRef();
   const [q,setQ] = useState(""); const [res,setRes] = useState([]);
   const [sel,setSel] = useState(initial||null); const [busy,setBusy] = useState(false);
@@ -1451,6 +1496,124 @@ function MapPicker({initial, onPick, onClose}){
     </div>
   </div>;
 }
+
+function NaverPlanMap({stops}){
+  const el = useRef(); const mapRef = useRef(); const objsRef = useRef([]);
+  const [err,setErr] = useState(false);
+  useEffect(()=>{
+    let alive = true;
+    loadNaverMaps().then(()=>{
+      if(!alive || !el.current) return;
+      const nm = window.naver.maps;
+      if(!mapRef.current){
+        mapRef.current = new nm.Map(el.current, {center:new nm.LatLng(36.5,127.8), zoom:7, scrollWheel:false});
+      }
+      objsRef.current.forEach(o=>o.setMap(null)); objsRef.current = [];
+      const pts = stops.filter(s=>s.lat && s.lng);
+      pts.forEach((s,i)=>{
+        objsRef.current.push(new nm.Marker({position:new nm.LatLng(s.lat,s.lng), map:mapRef.current,
+          icon:{content:'<div class="mkr">'+(i+1)+'</div>', anchor:new nm.Point(13,13)}}));
+      });
+      if(pts.length>1){
+        objsRef.current.push(new nm.Polyline({path:pts.map(s=>new nm.LatLng(s.lat,s.lng)),
+          strokeColor:"#E1889E", strokeWeight:3, strokeStyle:"shortdash", map:mapRef.current}));
+        const b = new nm.LatLngBounds();
+        pts.forEach(s=>b.extend(new nm.LatLng(s.lat,s.lng)));
+        mapRef.current.fitBounds(b);
+      } else if(pts.length===1){
+        mapRef.current.setCenter(new nm.LatLng(pts[0].lat, pts[0].lng));
+        mapRef.current.setZoom(14);
+      }
+    }).catch(()=>{ if(alive) setErr(true); });
+    return ()=>{ alive = false; };
+  },[stops]);
+  useEffect(()=>()=>{ if(mapRef.current){ try{ mapRef.current.destroy(); }catch(e){} mapRef.current=null; } },[]);
+  if(err) return <OsmPlanMap stops={stops}/>;
+  return <div ref={el} style={{height:230,borderRadius:16,overflow:"hidden",marginTop:10,position:"relative",zIndex:0,background:"var(--line)"}}/>;
+}
+function NaverMapPicker({initial, onPick, onClose}){
+  const mapEl = useRef(); const mapRef = useRef(); const markRef = useRef();
+  const [q,setQ] = useState(""); const [res,setRes] = useState([]);
+  const [sel,setSel] = useState(initial||null); const [busy,setBusy] = useState(false);
+  const [err,setErr] = useState(false);
+  const place = (lat,lng)=>{
+    setSel({lat,lng});
+    if(!mapRef.current) return;
+    const nm = window.naver.maps;
+    if(markRef.current) markRef.current.setPosition(new nm.LatLng(lat,lng));
+    else markRef.current = new nm.Marker({position:new nm.LatLng(lat,lng), map:mapRef.current,
+      icon:{content:'<div class="mkr">📍</div>', anchor:new nm.Point(13,13)}});
+  };
+  useEffect(()=>{
+    let alive = true;
+    loadNaverMaps().then(()=>{
+      if(!alive || mapRef.current || !mapEl.current) return;
+      const nm = window.naver.maps;
+      const m = new nm.Map(mapEl.current, {
+        center: initial? new nm.LatLng(initial.lat,initial.lng) : new nm.LatLng(36.5,127.8),
+        zoom: initial? 15 : 7});
+      nm.Event.addListener(m, "click", e=>place(e.coord.lat(), e.coord.lng()));
+      mapRef.current = m;
+      if(initial) place(initial.lat, initial.lng);
+    }).catch(()=>{ if(alive) setErr(true); });
+    return ()=>{ alive = false; if(mapRef.current){ try{ mapRef.current.destroy(); }catch(e){} mapRef.current=null; } };
+  },[]);
+  const search = async ()=>{
+    if(!q.trim()) return; setBusy(true);
+    const query = q.trim();
+    const done = (list)=>{ setRes(list); setBusy(false); };
+    try{
+      const nm = window.naver && window.naver.maps;
+      if(nm && nm.Service){
+        nm.Service.geocode({query}, (status, resp)=>{
+          const addrs = (status===nm.Service.Status.OK && resp.v2 && resp.v2.addresses) || [];
+          if(addrs.length>0){
+            done(addrs.map(a=>({name:a.roadAddress||a.jibunAddress||query, lat:+a.y, lng:+a.x})));
+          } else {
+            // 주소 검색에 없으면 오픈 검색으로 한 번 더
+            fetch("https://nominatim.openstreetmap.org/search?format=json&accept-language=ko&limit=6&q="+encodeURIComponent(query))
+              .then(r=>r.json()).then(j=>done(j.map(r=>({name:r.display_name, lat:+r.lat, lng:+r.lon}))))
+              .catch(()=>done([]));
+          }
+        });
+        return;
+      }
+    }catch(e){}
+    try{
+      const r = await fetch("https://nominatim.openstreetmap.org/search?format=json&accept-language=ko&limit=6&q="+encodeURIComponent(query));
+      const j = await r.json();
+      done(j.map(x=>({name:x.display_name, lat:+x.lat, lng:+x.lon})));
+    }catch(e){ done([]); }
+  };
+  if(err) return <OsmMapPicker initial={initial} onPick={onPick} onClose={onClose}/>;
+  return <div className="overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+    <BackTrap onClose={onClose}/>
+    <div className="sheet">
+      <div className="row" style={{justifyContent:"space-between"}}><b style={{fontSize:18}}>위치 지정 🗺️</b>
+        <button className="icon-btn" onClick={onClose}>{I.x}</button></div>
+      <div className="row" style={{marginTop:10}}>
+        <input placeholder="주소·장소 검색 (예: 대전 중구 대종로 480)" value={q}
+          onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()}/>
+        <button className="btn btn-primary" style={{width:"auto",whiteSpace:"nowrap"}} disabled={busy} onClick={search}>{busy?"…":"검색"}</button>
+      </div>
+      {res.length>0 && <div style={{marginTop:8}}>
+        {res.map((r,i)=><button key={i} className="row" style={{width:"100%",textAlign:"left",background:"#fff",
+            borderRadius:12,padding:"9px 12px",marginTop:6,boxShadow:"var(--shadow)"}}
+          onClick={()=>{ place(r.lat,r.lng);
+            mapRef.current && mapRef.current.setCenter(new window.naver.maps.LatLng(r.lat,r.lng));
+            mapRef.current && mapRef.current.setZoom(15); setRes([]); }}>
+          <span>📍</span><span style={{fontSize:13}} className="grow">{r.name}</span>
+        </button>)}
+      </div>}
+      <div className="sub" style={{marginTop:8}}>가게 이름은 검색이 안 될 수 있어요 — 주소로 검색하거나 지도를 직접 눌러 핀을 찍어주세요!</div>
+      <div ref={mapEl} style={{height:280,borderRadius:16,overflow:"hidden",marginTop:8,position:"relative",zIndex:0,background:"var(--line)"}}/>
+      <button className="btn btn-primary" style={{marginTop:14}} disabled={!sel}
+        onClick={()=>{ onPick(sel); onClose(); }}>{sel? "이 위치로 지정하기" : "지도를 눌러 위치를 골라주세요"}</button>
+    </div>
+  </div>;
+}
+function PlanMap(props){ return NAVER_MAP_KEY? <NaverPlanMap {...props}/> : <OsmPlanMap {...props}/>; }
+function MapPicker(props){ return NAVER_MAP_KEY? <NaverMapPicker {...props}/> : <OsmMapPicker {...props}/>; }
 
 function PlanForm({cid, me, init, onClose}){
   const [f,setF] = useState(init);
@@ -1896,7 +2059,7 @@ function PlanView({cid, me, users}){
             const tp = PLAN_TYPES[p.type]||PLAN_TYPES.etc;
             const pc = cardCol(p.color!=null? p.color : i);
             return <div key={p.id} className="folder"
-              style={{cursor:"pointer",background:pc.bg,...ivoryBorder(pc)}} onClick={()=>setOpenId(p.id)}>
+              style={{cursor:"pointer",background:pc.bg,border:"1.5px solid "+pc.line}} onClick={()=>setOpenId(p.id)}>
               <span className="tab" style={{background:pc.tab}}></span>
               <div style={{fontSize:22}}>{p.emoji || tp.emoji}</div>
               <b style={{fontSize:15,display:"block",marginTop:4}}>{p.title}</b>
@@ -2021,7 +2184,7 @@ function AccountView({me, userDoc, couple, users, refresh, cid}){
             <span className="sub">{mb} MB 사용 중</span>
             <span className="sub">무료 제공 약 1GB의 {pct<0.1? "0.1% 미만" : pct.toFixed(1)+"%"}</span>
           </div>
-          <div className="sub" style={{marginTop:6}}>사진은 자동 압축되어 저장돼요. 80%가 넘어가면 알려주세요 — 사진 저장 방식을 무료 외부 저장소로 넓혀드릴 수 있어요.</div>
+          <div className="sub" style={{marginTop:6}}>사진은 자동 압축되어 저장돼요. 80%가 넘어가면 사진 저장 방식을 무료 외부 저장소로 넓혀드릴 수 있어요.</div>
         </>;
       })()}
     </div>
@@ -2039,7 +2202,7 @@ function AccountView({me, userDoc, couple, users, refresh, cid}){
               boxShadow:"0 2px 8px rgba(120,90,80,.18)"}}/>;
         })}
       </div>
-      <div className="sub" style={{marginTop:8}}>현재: {THEMES[userDoc.theme||"pink"].name}</div>
+      <div className="sub" style={{marginTop:8}}>현재: {(THEMES[userDoc.theme]||THEMES.pink).name}</div>
     </div>
 
     {isPwUser && <div className="card" style={{marginTop:12}}>
@@ -2138,6 +2301,15 @@ function Shell({me}){
         a.sort((x,y)=> x.date===y.date ? (y.ts||0)-(x.ts||0) : (x.date<y.date?1:-1)); setDiaries(a); });
   },[userDoc&&userDoc.coupleId]);
 
+  // 일정도 앱 시작 시 미리 구독해 캘린더 진입 즉시 표시
+  const [events,setEvents] = useState([]);
+  useEffect(()=>{
+    if(!userDoc) return;
+    return db.collection("couples").doc(userDoc.coupleId).collection("events")
+      .onSnapshot(s=>{ const a=[]; s.forEach(d=>a.push({id:d.id,...d.data()}));
+        a.sort((x,y)=>x.date<y.date?-1:1); setEvents(a); });
+  },[userDoc&&userDoc.coupleId]);
+
   // 일기 탭을 보면 "확인함"으로 기록 → 새 글/댓글 배지 계산에 사용
   useEffect(()=>{
     if(tab==="diary" && userDoc){
@@ -2193,14 +2365,15 @@ function Shell({me}){
         <CoupleCard couple={couple} me={me} onJoined={refresh}/>
       </div>}
       {tab==="interests" && <Interests cid={cid} me={me} users={usersM} couple={couple}/>}
-      {tab==="calendar" && <CalendarView cid={cid} me={me} diaries={diaries}
+      {tab==="calendar" && <CalendarView cid={cid} me={me} diaries={diaries} events={events}
         onWrite={d=>{setEditorDate(d); setTab("diary");}}
         onOpen={d=>{setOpenId(d.id); setTab("diary");}}/>}
       {tab==="diary" && <DiaryView cid={cid} me={me} users={usersM} diaries={diaries}
         editorDate={editorDate} clearEditorDate={()=>setEditorDate(null)}
         openId={openId} clearOpenId={()=>setOpenId(null)}/>}
       {tab==="plan" && <PlanView cid={cid} me={me} users={usersM}/>}
-      {tab==="bucket" && <BucketView cid={cid} me={me}/>}
+      {tab==="bucket" && <BucketView cid={cid} me={me} diaries={diaries}
+        onOpenDiary={(id)=>{ setOpenId(id); setTab("diary"); }}/>}
       {tab==="account" && <AccountView me={me} userDoc={userDoc} couple={couple} users={usersM} refresh={refresh} cid={cid}/>}
     </div>
     <nav className="nav">
